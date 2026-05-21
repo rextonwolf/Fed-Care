@@ -1,0 +1,39 @@
+# Virtual environments
+.venv
+venv
+env
+
+# Python cache
+__pycache__
+*.py[cod]
+*$py.class
+*.so
+.Python
+
+# Git & IDE
+.git
+.gitignore
+.idea
+.vscode
+*.md
+
+# Local databases (mount as volume in production)
+*.db
+healthcare_ai.db
+
+# Training artifacts not needed at runtime (keep models/ via COPY)
+training/
+federated/
+evaluation/
+fairness/
+cardio_dataset.py
+preprocessing.py
+
+# Reports (generated at runtime)
+reports/*.png
+
+# Tests & dev
+tests/
+*.log
+.env
+.env.*

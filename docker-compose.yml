@@ -1,0 +1,63 @@
+# Federated Healthcare AI Platform — local enterprise development & deployment
+# Usage: docker compose up --build
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: fedhealth-backend
+    ports:
+      - "8000:8000"
+    environment:
+      JWT_SECRET_KEY: ${JWT_SECRET_KEY:-SUPER_SECRET_ENTERPRISE_KEY}
+      PYTHONUNBUFFERED: "1"
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:3000,http://127.0.0.1:3000}
+    volumes:
+      # Persist SQLite audit logs
+      - ./backend/healthcare_ai.db:/app/healthcare_ai.db
+      # ML artifacts (mount local trained model & scaler)
+      - ./backend/models:/app/models
+      - ./backend/scalers:/app/scalers
+      # SHAP background dataset
+      - ./backend/processed_data:/app/processed_data
+      # Generated explainability reports
+      - ./backend/reports:/app/reports
+    healthcheck:
+      test:
+        [
+          "CMD",
+          "python",
+          "-c",
+          "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/')",
+        ]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - fedhealth-net
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    container_name: fedhealth-frontend
+    ports:
+      - "3000:3000"
+    environment:
+      NODE_ENV: production
+      NEXT_PUBLIC_API_URL: ${NEXT_PUBLIC_API_URL:-http://localhost:8000}
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - fedhealth-net
+
+networks:
+  fedhealth-net:
+    driver: bridge

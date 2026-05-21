@@ -1,0 +1,36 @@
+# Core ML
+torch
+torchvision
+numpy
+pandas
+scikit-learn
+joblib
+
+# Federated Learning
+flwr
+
+# Explainability & Fairness
+shap
+matplotlib
+seaborn
+fairlearn
+
+# Backend API
+fastapi
+uvicorn
+pydantic
+
+# Security & Authentication
+python-jose
+passlib
+bcrypt
+python-multipart
+
+# Database
+sqlalchemy
+
+# Frontend API Requests
+requests
+
+# Utilities
+python-dotenv

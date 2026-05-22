@@ -321,13 +321,14 @@ docker compose up --build
 
 **Compose highlights**
 
-- Volume mounts for `models/`, `scalers/`, `processed_data/`, `healthcare_ai.db`, `reports/`
-- Environment variables: `JWT_SECRET_KEY`, `NEXT_PUBLIC_API_URL`, `CORS_ORIGINS`
+- Volume mounts for `models/`, `scalers/`, `processed_data/`, `reports/`
+- Configuration via `.env` / `backend/.env` (see `.env.example` and `backend/.env.example`): `DATABASE_URL`, `JWT_SECRET_KEY`, `CORS_ORIGINS`, demo auth passwords, ML paths
 - Backend healthcheck gates frontend startup
 
 **Production tips**
 
-- Change `JWT_SECRET_KEY` in `.env` — never use defaults in production  
+- Set strong `JWT_SECRET_KEY` and `DATABASE_URL` in `.env` — never use defaults in production
+- Restrict `CORS_ORIGINS` to your frontend domain(s)  
 - Place TLS termination behind nginx / cloud load balancer  
 - First `/explainability` call may take 15–30s while SHAP initializes  
 

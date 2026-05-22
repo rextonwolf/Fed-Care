@@ -28,6 +28,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
     PYTHONUNBUFFERED=1 \
     PIP_NO_CACHE_DIR=1 \
     PORT=8000
+# Secrets (DATABASE_URL, JWT_SECRET_KEY, etc.) are injected via docker-compose / .env — not baked into the image.
 
 # libgomp1: PyTorch CPU; non-root user for production
 RUN apt-get update && apt-get install -y --no-install-recommends \

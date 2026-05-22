@@ -1,5 +1,6 @@
 "use client";
 
+import { useCallback, useEffect, useMemo, useState } from "react";
 import Layout from "../components/Layout";
 import {
   LineChart,
@@ -13,228 +14,31 @@ import {
   CartesianGrid,
   Legend,
   ReferenceLine,
+  PieChart,
+  Pie,
+  Cell,
 } from "recharts";
+import {
+  fetchFairnessDashboardData,
+  getFairnessErrorMessage,
+  type FairnessDashboardData,
+  type ProtectedGroupStat,
+  type SubgroupPositiveRate,
+} from "../../lib/fairness";
 
-const auditMeta = {
-  modelVersion: "FTTransformer v1.2.4",
-  lastAudit: "5/21/2026 2:30 PM",
-  nextReview: "6/21/2026",
-  framework: "FDA GMLP · EU AI Act · HIPAA",
+const REFRESH_INTERVAL_MS = 30_000;
+const PARITY_GAP_PASS = 0.1;
+
+const GENDER_COLORS: Record<string, string> = {
+  female: "#7c3aed",
+  male: "#2563eb",
+  unknown: "#94a3b8",
 };
 
-const fairnessMetrics = [
-  {
-    label: "Overall Fairness Index",
-    value: "0.91",
-    threshold: "≥ 0.85",
-    status: "pass",
-    detail: "Weighted composite across protected attributes",
-  },
-  {
-    label: "Demographic Parity Δ",
-    value: "0.06",
-    threshold: "≤ 0.10",
-    status: "pass",
-    detail: "Max positive rate gap between groups",
-  },
-  {
-    label: "Equalized Odds Δ",
-    value: "0.08",
-    threshold: "≤ 0.10",
-    status: "pass",
-    detail: "TPR/FPR disparity across cohorts",
-  },
-  {
-    label: "Calibration Error",
-    value: "0.04",
-    threshold: "≤ 0.05",
-    status: "pass",
-    detail: "Predicted vs. observed risk alignment",
-  },
-];
+const PIE_COLORS = ["#7c3aed", "#2563eb", "#94a3b8", "#0891b2"];
 
-const demographicParityData = [
-  { group: "Female", positiveRate: 0.34, benchmark: 0.32 },
-  { group: "Male", positiveRate: 0.38, benchmark: 0.32 },
-  { group: "Non-binary", positiveRate: 0.33, benchmark: 0.32 },
-  { group: "Unknown", positiveRate: 0.31, benchmark: 0.32 },
-];
-
-const genderRiskDistribution = [
-  { category: "Low Risk", female: 42, male: 38, nonBinary: 44 },
-  { category: "Medium Risk", female: 31, male: 34, nonBinary: 30 },
-  { category: "High Risk", female: 27, male: 28, nonBinary: 26 },
-];
-
-const fairnessTrend = [
-  { month: "Jan", fairnessIndex: 0.86, parityDelta: 0.11 },
-  { month: "Feb", fairnessIndex: 0.87, parityDelta: 0.1 },
-  { month: "Mar", fairnessIndex: 0.88, parityDelta: 0.09 },
-  { month: "Apr", fairnessIndex: 0.89, parityDelta: 0.08 },
-  { month: "May", fairnessIndex: 0.91, parityDelta: 0.06 },
-];
-
-const biasIndicators = [
-  {
-    id: "BIAS-01",
-    attribute: "Gender",
-    severity: "low",
-    metric: "Demographic parity",
-    gap: "0.04",
-    status: "within_threshold",
-    message: "Male cohort shows +4% higher positive rate vs. female",
-  },
-  {
-    id: "BIAS-02",
-    attribute: "Age (65+)",
-    severity: "medium",
-    metric: "False negative rate",
-    gap: "0.07",
-    status: "monitor",
-    message: "Senior patients under-flagged for high risk in validation set",
-  },
-  {
-    id: "BIAS-03",
-    attribute: "Race/Ethnicity",
-    severity: "low",
-    metric: "Equalized odds",
-    gap: "0.05",
-    status: "within_threshold",
-    message: "TPR gap across racial groups within institutional policy",
-  },
-  {
-    id: "BIAS-04",
-    attribute: "Insurance type",
-    severity: "high",
-    metric: "Calibration",
-    gap: "0.09",
-    status: "action_required",
-    message: "Medicaid cohort shows miscalibration at high-risk threshold",
-  },
-];
-
-const fairnessScorecards = [
-  { dimension: "Gender equity", score: 92, grade: "A", trend: "↑ 3 pts" },
-  { dimension: "Age fairness", score: 85, grade: "B+", trend: "↑ 1 pt" },
-  { dimension: "Racial equity", score: 88, grade: "A-", trend: "stable" },
-  { dimension: "Socioeconomic", score: 78, grade: "B", trend: "↓ 2 pts" },
-  { dimension: "Geographic", score: 94, grade: "A", trend: "↑ 4 pts" },
-];
-
-const complianceItems = [
-  { requirement: "Bias audit documentation", status: "compliant", ref: "§ FDA GMLP 4.2" },
-  { requirement: "Protected attribute monitoring", status: "compliant", ref: "EU AI Act Art. 10" },
-  { requirement: "Human oversight workflow", status: "compliant", ref: "Institutional IRB" },
-  { requirement: "Explainability availability", status: "compliant", ref: "Internal policy 7.1" },
-  { requirement: "Calibration recertification", status: "pending", ref: "Q2 2026 review" },
-];
-
-const protectedAttributeTable = [
-  {
-    attribute: "Gender — Female",
-    sampleSize: "18,200",
-    positiveRate: "34%",
-    tpr: "0.81",
-    fpr: "0.12",
-    parityGap: "—",
-    flag: "OK",
-  },
-  {
-    attribute: "Gender — Male",
-    sampleSize: "19,400",
-    positiveRate: "38%",
-    tpr: "0.84",
-    fpr: "0.14",
-    parityGap: "+0.04",
-    flag: "Monitor",
-  },
-  {
-    attribute: "Age — Under 50",
-    sampleSize: "14,100",
-    positiveRate: "28%",
-    tpr: "0.79",
-    fpr: "0.10",
-    parityGap: "—",
-    flag: "OK",
-  },
-  {
-    attribute: "Age — 50–64",
-    sampleSize: "12,800",
-    positiveRate: "35%",
-    tpr: "0.82",
-    fpr: "0.13",
-    parityGap: "+0.03",
-    flag: "OK",
-  },
-  {
-    attribute: "Age — 65+",
-    sampleSize: "10,700",
-    positiveRate: "41%",
-    tpr: "0.76",
-    fpr: "0.15",
-    parityGap: "+0.07",
-    flag: "Review",
-  },
-  {
-    attribute: "Race — White",
-    sampleSize: "22,100",
-    positiveRate: "33%",
-    tpr: "0.83",
-    fpr: "0.13",
-    parityGap: "—",
-    flag: "OK",
-  },
-  {
-    attribute: "Race — Black",
-    sampleSize: "8,400",
-    positiveRate: "36%",
-    tpr: "0.80",
-    fpr: "0.14",
-    parityGap: "+0.03",
-    flag: "OK",
-  },
-  {
-    attribute: "Insurance — Medicaid",
-    sampleSize: "6,200",
-    positiveRate: "39%",
-    tpr: "0.74",
-    fpr: "0.16",
-    parityGap: "+0.09",
-    flag: "Action",
-  },
-];
-
-const mitigations = [
-  {
-    priority: "High",
-    title: "Recalibrate Medicaid cohort predictions",
-    action:
-      "Apply Platt scaling on held-out validation split; target calibration error ≤ 0.05 before next deployment.",
-    owner: "Model Risk Committee",
-    eta: "5/28/2026",
-  },
-  {
-    priority: "Medium",
-    title: "Age-stratified threshold review",
-    action:
-      "Evaluate age-adjusted decision thresholds for 65+ patients to reduce false negative disparity.",
-    owner: "Clinical AI Governance",
-    eta: "6/05/2026",
-  },
-  {
-    priority: "Low",
-    title: "Expand gender category reporting",
-    action:
-      "Increase non-binary sample representation in federated round 25 training cohort.",
-    owner: "Data Stewardship",
-    eta: "6/15/2026",
-  },
-];
-
-const GENDER_COLORS = { female: "#7c3aed", male: "#2563eb", nonBinary: "#0891b2" };
-
-function metricStatusStyle(status: string) {
-  return status === "pass"
+function metricStatusStyle(passed: boolean) {
+  return passed
     ? "border-emerald-200 bg-emerald-50"
     : "border-amber-200 bg-amber-50";
 }
@@ -250,6 +54,14 @@ function severityStyle(severity: string) {
   }
 }
 
+function flagFromGap(gap: number): string {
+  const abs = Math.abs(gap);
+  if (abs >= 0.09) return "Action";
+  if (abs >= 0.05) return "Review";
+  if (abs >= 0.03) return "Monitor";
+  return "OK";
+}
+
 function flagStyle(flag: string) {
   switch (flag) {
     case "Action":
@@ -263,16 +75,271 @@ function flagStyle(flag: string) {
   }
 }
 
+function gradeFromScore(score: number): string {
+  if (score >= 90) return "A";
+  if (score >= 85) return "A-";
+  if (score >= 80) return "B+";
+  if (score >= 75) return "B";
+  return "C";
+}
+
 function gradeColor(grade: string) {
   if (grade.startsWith("A")) return "text-emerald-600";
   return "text-amber-600";
 }
 
+function formatAuditTime(iso: string | undefined): string {
+  if (!iso) return "—";
+  try {
+    return new Date(iso).toLocaleString();
+  } catch {
+    return iso;
+  }
+}
+
+function KpiSkeleton() {
+  return (
+    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm animate-pulse">
+      <div className="h-4 bg-slate-200 rounded w-2/3 mb-4" />
+      <div className="h-9 bg-slate-200 rounded w-1/2" />
+    </div>
+  );
+}
+
 export default function FairnessPage() {
+  const [data, setData] = useState<FairnessDashboardData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+
+  const loadFairness = useCallback(async (isRefresh = false) => {
+    const token =
+      typeof window !== "undefined" ? localStorage.getItem("token") : null;
+
+    if (!token) {
+      setError("No authentication token found. Please log in first.");
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
+    if (isRefresh) setRefreshing(true);
+    else setLoading(true);
+    setError(null);
+
+    try {
+      const result = await fetchFairnessDashboardData(90);
+      setData(result);
+      setLastUpdated(new Date());
+    } catch (err: unknown) {
+      setError(getFairnessErrorMessage(err));
+      if (!isRefresh) setData(null);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadFairness(false);
+    const id = setInterval(() => loadFairness(true), REFRESH_INTERVAL_MS);
+    return () => clearInterval(id);
+  }, [loadFairness]);
+
+  const metrics = data?.metrics;
+  const trends = data?.trends;
+
+  const parityPassed = (metrics?.fairness_gap ?? 1) <= PARITY_GAP_PASS;
+  const scorePassed = (metrics?.demographic_parity_score ?? 0) >= 0.85;
+
+  const governanceStatus = useMemo(() => {
+    if (!metrics) return { label: "Loading", color: "text-slate-600" };
+    if (metrics.sample_size === 0) return { label: "Awaiting Data", color: "text-slate-600" };
+    if (!parityPassed) return { label: "Review Required", color: "text-amber-700" };
+    return { label: "Conditionally Approved", color: "text-emerald-700" };
+  }, [metrics, parityPassed]);
+
+  const actionRequiredCount =
+    trends?.bias_drift_indicators.filter(
+      (b) => b.status === "action_required" || b.severity === "high"
+    ).length ?? 0;
+
+  const demographicParityChart = useMemo(() => {
+    if (!metrics) return [];
+    return metrics.subgroup_positive_prediction_rates
+      .filter((s) => s.attribute === "gender")
+      .map((s) => ({
+        group: s.group,
+        positiveRate: s.positive_prediction_rate,
+        benchmark: s.benchmark_rate ?? metrics.population_positive_rate,
+      }));
+  }, [metrics]);
+
+  const genderDistributionPie = useMemo(
+    () =>
+      metrics?.gender_distribution.map((g) => ({
+        name: g.group,
+        value: g.count,
+        percentage: g.percentage,
+      })) ?? [],
+    [metrics]
+  );
+
+  const fairnessTrendChart = useMemo(
+    () =>
+      trends?.fairness_metrics_over_time.map((p) => ({
+        label: p.date.slice(5),
+        fullDate: p.date,
+        fairnessIndex: p.demographic_parity_score,
+        parityDelta: p.fairness_gap,
+        predictions: p.prediction_count,
+      })) ?? [],
+    [trends]
+  );
+
+  const fairnessScorecards = useMemo(() => {
+    if (!metrics) return [];
+
+    const genderScore = Math.round(metrics.demographic_parity_score * 100);
+    const cards: { dimension: string; score: number; grade: string; trend: string }[] = [
+      {
+        dimension: "Gender equity",
+        score: genderScore,
+        grade: gradeFromScore(genderScore),
+        trend: `Gap ${metrics.fairness_gap.toFixed(2)}`,
+      },
+    ];
+
+    const ageGroups = metrics.subgroup_positive_prediction_rates.filter(
+      (s) => s.attribute === "age"
+    );
+    if (ageGroups.length > 0) {
+      const rates = ageGroups.map((g) => g.positive_prediction_rate);
+      const ageGap = Math.max(...rates) - Math.min(...rates);
+      const ageScore = Math.round(Math.max(0, 1 - ageGap) * 100);
+      cards.push({
+        dimension: "Age fairness",
+        score: ageScore,
+        grade: gradeFromScore(ageScore),
+        trend: `Δ ${ageGap.toFixed(2)}`,
+      });
+    }
+
+    cards.push({
+      dimension: "Population coverage",
+      score: Math.min(100, metrics.sample_size),
+      grade: metrics.sample_size >= 50 ? "A" : metrics.sample_size >= 10 ? "B" : "C",
+      trend: `${metrics.sample_size} predictions`,
+    });
+
+    return cards;
+  }, [metrics]);
+
+  const protectedTableRows = useMemo(() => {
+    if (!metrics) return [];
+
+    const pop = metrics.population_positive_rate;
+
+    const fromGender = metrics.protected_group_statistics.map((stat) =>
+      buildTableRow(stat, pop)
+    );
+
+    const fromAge = metrics.subgroup_positive_prediction_rates
+      .filter((s) => s.attribute === "age")
+      .map((s) => buildAgeTableRow(s, pop));
+
+    return [...fromGender, ...fromAge];
+  }, [metrics]);
+
+  const complianceItems = useMemo(() => {
+    const hasData = (metrics?.sample_size ?? 0) > 0;
+    const gapOk = parityPassed;
+    return [
+      {
+        requirement: "Bias audit documentation",
+        status: hasData ? "compliant" : "pending",
+        ref: "§ FDA GMLP 4.2",
+      },
+      {
+        requirement: "Protected attribute monitoring",
+        status: hasData ? "compliant" : "pending",
+        ref: "EU AI Act Art. 10",
+      },
+      {
+        requirement: "Demographic parity threshold",
+        status: gapOk ? "compliant" : "pending",
+        ref: `Gap ≤ ${PARITY_GAP_PASS}`,
+      },
+      {
+        requirement: "Explainability availability",
+        status: "compliant",
+        ref: "Internal policy 7.1",
+      },
+      {
+        requirement: "Live fairness telemetry",
+        status: trends?.computed_at ? "compliant" : "pending",
+        ref: "PostgreSQL audit trail",
+      },
+    ];
+  }, [metrics, trends, parityPassed]);
+
+  const mitigations = useMemo(() => {
+    const indicators = trends?.bias_drift_indicators ?? [];
+    return indicators
+      .filter((i) => i.severity !== "low" || i.status === "action_required")
+      .map((i) => ({
+        priority:
+          i.severity === "high"
+            ? "High"
+            : i.severity === "medium"
+            ? "Medium"
+            : "Low",
+        title: `${i.attribute} — ${i.metric.replace(/_/g, " ")}`,
+        action: i.message,
+        owner: "Responsible AI Committee",
+        eta: "Next review cycle",
+        id: i.indicator_id,
+      }));
+  }, [trends]);
+
+  const kpiCards = metrics
+    ? [
+        {
+          label: "Demographic Parity Score",
+          value: metrics.demographic_parity_score.toFixed(2),
+          threshold: "≥ 0.85",
+          status: scorePassed ? "pass" : "warn",
+          detail: "1 − max positive-rate gap across gender groups",
+        },
+        {
+          label: "Fairness Gap (Δ)",
+          value: metrics.fairness_gap.toFixed(2),
+          threshold: `≤ ${PARITY_GAP_PASS}`,
+          status: parityPassed ? "pass" : "warn",
+          detail: "Max − min high-risk positive rate by gender",
+        },
+        {
+          label: "Population Positive Rate",
+          value: `${(metrics.population_positive_rate * 100).toFixed(1)}%`,
+          threshold: "Benchmark cohort",
+          status: "pass",
+          detail: "Share of high-risk predictions platform-wide",
+        },
+        {
+          label: "Audit Sample Size",
+          value: metrics.sample_size.toLocaleString(),
+          threshold: "Live prediction logs",
+          status: metrics.sample_size > 0 ? "pass" : "warn",
+          detail: `Computed ${formatAuditTime(metrics.computed_at)}`,
+        },
+      ]
+    : [];
+
   return (
     <Layout>
       <div className="min-h-screen bg-gradient-to-br from-violet-50/50 via-slate-50 to-slate-100 -m-8 p-6 md:p-8">
-        {/* Header — AI governance */}
+        {/* Header */}
         <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <div className="mb-2 flex flex-wrap items-center gap-2">
@@ -280,41 +347,80 @@ export default function FairnessPage() {
                 AI Governance & Ethics
               </span>
               <span className="rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-medium text-slate-600">
-                Bias Monitoring
+                Live Bias Monitoring
               </span>
             </div>
             <h1 className="text-3xl font-bold tracking-tight text-slate-900 md:text-4xl">
               Fairness & Bias Dashboard
             </h1>
             <p className="mt-2 max-w-2xl text-slate-600">
-              Enterprise compliance view of model fairness across protected attributes.
-              Mock healthcare analytics for ethical AI oversight and regulatory readiness.
+              Responsible AI governance view powered by live prediction-log fairness
+              analytics. Auto-refresh every 30 seconds.
             </p>
+            {lastUpdated && (
+              <p className="mt-2 text-xs text-slate-500">
+                Last sync: {lastUpdated.toLocaleTimeString()}
+                {refreshing ? " · updating…" : ""}
+              </p>
+            )}
           </div>
 
-          <div className="w-full shrink-0 rounded-2xl border border-violet-200 bg-white p-5 shadow-sm lg:max-w-sm">
-            <div className="flex items-center gap-3">
-              <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-violet-600 text-white">
-                <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
-                  />
-                </svg>
+          <div className="flex flex-wrap items-center gap-3">
+            <button
+              type="button"
+              onClick={() => loadFairness(!!data)}
+              disabled={loading || refreshing}
+              className="text-sm font-medium px-4 py-2 bg-violet-700 text-white rounded-lg hover:bg-violet-800 disabled:opacity-50 transition"
+            >
+              Refresh
+            </button>
+
+            <div className="w-full shrink-0 rounded-2xl border border-violet-200 bg-white p-5 shadow-sm lg:max-w-sm">
+              <div className="flex items-center gap-3">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-violet-600 text-white">
+                  <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                    <path
+                      strokeLinecap="round"
+                      strokeLinejoin="round"
+                      strokeWidth={2}
+                      d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z"
+                    />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-xs font-semibold uppercase text-slate-500">
+                    Ethical AI Status
+                  </p>
+                  <p className={`text-lg font-bold ${governanceStatus.color}`}>
+                    {governanceStatus.label}
+                  </p>
+                </div>
               </div>
-              <div>
-                <p className="text-xs font-semibold uppercase text-slate-500">Ethical AI Status</p>
-                <p className="text-lg font-bold text-emerald-700">Conditionally Approved</p>
-              </div>
+              <p className="mt-3 text-xs text-slate-500">
+                Sample: {metrics?.sample_size?.toLocaleString() ?? "—"} predictions
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                Last computed: {formatAuditTime(metrics?.computed_at)}
+              </p>
+              <p className="mt-1 text-xs text-slate-500">
+                Frameworks: FDA GMLP · EU AI Act · HIPAA
+              </p>
             </div>
-            <p className="mt-3 text-xs text-slate-500">
-              Model: {auditMeta.modelVersion} · Last audit: {auditMeta.lastAudit}
-            </p>
-            <p className="mt-1 text-xs text-slate-500">Frameworks: {auditMeta.framework}</p>
           </div>
         </div>
+
+        {error && (
+          <div className="mb-6 p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <span className="font-medium">{error}</span>
+            <button
+              type="button"
+              onClick={() => loadFairness(!!data)}
+              className="text-sm font-semibold underline hover:no-underline shrink-0"
+            >
+              Retry
+            </button>
+          </div>
+        )}
 
         {/* Fairness metrics cards */}
         <section className="mb-8">
@@ -322,212 +428,346 @@ export default function FairnessPage() {
             Fairness Metrics
           </h2>
           <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-4">
-            {fairnessMetrics.map((m) => (
-              <div
-                key={m.label}
-                className={`rounded-2xl border p-5 shadow-sm ${metricStatusStyle(m.status)}`}
-              >
-                <div className="flex items-start justify-between">
-                  <p className="text-sm font-medium text-slate-600">{m.label}</p>
-                  <span className="rounded-full bg-emerald-600 px-2 py-0.5 text-xs font-bold text-white">
-                    PASS
-                  </span>
+            {loading ? (
+              <>
+                <KpiSkeleton />
+                <KpiSkeleton />
+                <KpiSkeleton />
+                <KpiSkeleton />
+              </>
+            ) : (
+              kpiCards.map((m) => (
+                <div
+                  key={m.label}
+                  className={`rounded-2xl border p-5 shadow-sm ${metricStatusStyle(m.status === "pass")}`}
+                >
+                  <div className="flex items-start justify-between">
+                    <p className="text-sm font-medium text-slate-600">{m.label}</p>
+                    <span
+                      className={`rounded-full px-2 py-0.5 text-xs font-bold text-white ${
+                        m.status === "pass" ? "bg-emerald-600" : "bg-amber-600"
+                      }`}
+                    >
+                      {m.status === "pass" ? "PASS" : "REVIEW"}
+                    </span>
+                  </div>
+                  <p className="mt-2 text-3xl font-bold text-slate-900">{m.value}</p>
+                  <p className="mt-1 text-xs text-slate-500">Threshold: {m.threshold}</p>
+                  <p className="mt-2 text-xs text-slate-600">{m.detail}</p>
                 </div>
-                <p className="mt-2 text-3xl font-bold text-slate-900">{m.value}</p>
-                <p className="mt-1 text-xs text-slate-500">Threshold: {m.threshold}</p>
-                <p className="mt-2 text-xs text-slate-600">{m.detail}</p>
-              </div>
-            ))}
+              ))
+            )}
           </div>
         </section>
 
-        {/* Fairness scorecards */}
+        {/* Scorecards */}
         <section className="mb-8">
           <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-500">
             Fairness Scorecards
           </h2>
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-5">
-            {fairnessScorecards.map((card) => (
-              <div
-                key={card.dimension}
-                className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
-              >
-                <p className="text-sm font-medium text-slate-600">{card.dimension}</p>
-                <div className="mt-2 flex items-end justify-between">
-                  <span className="text-3xl font-bold text-slate-900">{card.score}</span>
-                  <span className={`text-xl font-bold ${gradeColor(card.grade)}`}>
-                    {card.grade}
-                  </span>
+          {loading ? (
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 lg:grid-cols-3">
+              <KpiSkeleton />
+              <KpiSkeleton />
+              <KpiSkeleton />
+            </div>
+          ) : fairnessScorecards.length === 0 ? (
+            <p className="text-sm text-slate-500">No scorecard data available.</p>
+          ) : (
+            <div
+              className={`grid grid-cols-1 gap-4 sm:grid-cols-2 ${
+                fairnessScorecards.length >= 4 ? "lg:grid-cols-4" : "lg:grid-cols-3"
+              }`}
+            >
+              {fairnessScorecards.map((card) => (
+                <div
+                  key={card.dimension}
+                  className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+                >
+                  <p className="text-sm font-medium text-slate-600">{card.dimension}</p>
+                  <div className="mt-2 flex items-end justify-between">
+                    <span className="text-3xl font-bold text-slate-900">{card.score}</span>
+                    <span className={`text-xl font-bold ${gradeColor(card.grade)}`}>
+                      {card.grade}
+                    </span>
+                  </div>
+                  <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
+                    <div
+                      className="h-full rounded-full bg-violet-500"
+                      style={{ width: `${Math.min(100, card.score)}%` }}
+                    />
+                  </div>
+                  <p className="mt-2 text-xs text-slate-500">{card.trend}</p>
                 </div>
-                <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
-                  <div
-                    className="h-full rounded-full bg-violet-500"
-                    style={{ width: `${card.score}%` }}
-                  />
-                </div>
-                <p className="mt-2 text-xs text-slate-500">{card.trend}</p>
-              </div>
-            ))}
-          </div>
+              ))}
+            </div>
+          )}
         </section>
 
-        {/* Charts */}
+        {/* Charts row 1 */}
         <div className="mb-8 grid grid-cols-1 gap-6 xl:grid-cols-2">
           <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="text-lg font-bold text-slate-900">Demographic Parity</h2>
+            <h2 className="text-lg font-bold text-slate-900">
+              Subgroup Positive Rates
+            </h2>
             <p className="mb-6 text-sm text-slate-500">
-              High-risk positive rate by gender vs. institutional benchmark (32%)
+              High-risk positive rate by gender vs. population benchmark
             </p>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={demographicParityData}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                <XAxis dataKey="group" tick={{ fill: "#64748b", fontSize: 12 }} />
-                <YAxis
-                  domain={[0, 0.5]}
-                  tickFormatter={(v) => `${(Number(v) * 100).toFixed(0)}%`}
-                  tick={{ fill: "#64748b", fontSize: 12 }}
-                />
-                <Tooltip
-                  formatter={(value) => {
-                    const n = Number(value ?? 0);
-                    return [`${(n * 100).toFixed(1)}%`, ""];
-                  }}
-                  contentStyle={{ borderRadius: "8px", border: "1px solid #e2e8f0" }}
-                />
-                <Legend />
-                <ReferenceLine
-                  y={0.32}
-                  stroke="#94a3b8"
-                  strokeDasharray="4 4"
-                  label={{ value: "Benchmark", fill: "#64748b", fontSize: 11 }}
-                />
-                <Bar dataKey="positiveRate" name="Positive Rate" fill="#7c3aed" radius={[6, 6, 0, 0]} />
-                <Bar dataKey="benchmark" name="Benchmark" fill="#cbd5e1" radius={[6, 6, 0, 0]} />
-              </BarChart>
-            </ResponsiveContainer>
+            {loading ? (
+              <ChartSpinner />
+            ) : demographicParityChart.length === 0 ? (
+              <EmptyChart message="No gender subgroup data yet." />
+            ) : (
+              <ResponsiveContainer width="100%" height={300}>
+                <BarChart data={demographicParityChart}>
+                  <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                  <XAxis dataKey="group" tick={{ fill: "#64748b", fontSize: 12 }} />
+                  <YAxis
+                    domain={[0, "auto"]}
+                    tickFormatter={(v) => `${(Number(v) * 100).toFixed(0)}%`}
+                    tick={{ fill: "#64748b", fontSize: 12 }}
+                  />
+                  <Tooltip
+                    formatter={(value) => {
+                      const n = Number(value ?? 0);
+                      return [`${(n * 100).toFixed(1)}%`, ""];
+                    }}
+                    contentStyle={{ borderRadius: "8px", border: "1px solid #e2e8f0" }}
+                  />
+                  <Legend />
+                  {metrics && (
+                    <ReferenceLine
+                      y={metrics.population_positive_rate}
+                      stroke="#94a3b8"
+                      strokeDasharray="4 4"
+                      label={{ value: "Population", fill: "#64748b", fontSize: 11 }}
+                    />
+                  )}
+                  <Bar
+                    dataKey="positiveRate"
+                    name="Positive Rate"
+                    fill="#7c3aed"
+                    radius={[6, 6, 0, 0]}
+                  />
+                  <Bar
+                    dataKey="benchmark"
+                    name="Benchmark"
+                    fill="#cbd5e1"
+                    radius={[6, 6, 0, 0]}
+                  />
+                </BarChart>
+              </ResponsiveContainer>
+            )}
           </section>
 
           <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-            <h2 className="text-lg font-bold text-slate-900">Gender Risk Distribution</h2>
+            <h2 className="text-lg font-bold text-slate-900">Gender Distribution</h2>
             <p className="mb-6 text-sm text-slate-500">
-              Predicted risk category distribution (%) by gender cohort
+              Prediction volume share across gender cohorts (live logs)
             </p>
-            <ResponsiveContainer width="100%" height={300}>
-              <BarChart data={genderRiskDistribution}>
-                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
-                <XAxis dataKey="category" tick={{ fill: "#64748b", fontSize: 12 }} />
-                <YAxis tick={{ fill: "#64748b", fontSize: 12 }} unit="%" />
-                <Tooltip contentStyle={{ borderRadius: "8px", border: "1px solid #e2e8f0" }} />
-                <Legend />
-                <Bar dataKey="female" name="Female" fill={GENDER_COLORS.female} stackId="a" />
-                <Bar dataKey="male" name="Male" fill={GENDER_COLORS.male} stackId="a" />
-                <Bar dataKey="nonBinary" name="Non-binary" fill={GENDER_COLORS.nonBinary} stackId="a" />
-              </BarChart>
-            </ResponsiveContainer>
+            {loading ? (
+              <ChartSpinner />
+            ) : genderDistributionPie.length === 0 ? (
+              <EmptyChart message="No gender distribution data." />
+            ) : (
+              <ResponsiveContainer width="100%" height={300}>
+                <PieChart>
+                  <Pie
+                    data={genderDistributionPie}
+                    dataKey="value"
+                    nameKey="name"
+                    outerRadius={110}
+                    label={({ name, percent }) =>
+                      `${name} ${((percent ?? 0) * 100).toFixed(0)}%`
+                    }
+                  >
+                    {genderDistributionPie.map((_, i) => (
+                      <Cell key={i} fill={PIE_COLORS[i % PIE_COLORS.length]} />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    formatter={(value, _name, item) => [
+                      `${value} (${item?.payload?.percentage ?? 0}%)`,
+                      item?.payload?.name,
+                    ]}
+                  />
+                  <Legend />
+                </PieChart>
+              </ResponsiveContainer>
+            )}
           </section>
         </div>
+
+        {/* Risk by gender */}
+        <section className="mb-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <h2 className="text-lg font-bold text-slate-900">Risk Distribution by Gender</h2>
+          <p className="mb-6 text-sm text-slate-500">
+            Predicted risk tier counts by gender cohort
+          </p>
+          {loading ? (
+            <ChartSpinner />
+          ) : !metrics?.risk_distribution_by_gender.length ? (
+            <EmptyChart message="No risk distribution data." />
+          ) : (
+            <ResponsiveContainer width="100%" height={300}>
+              <BarChart data={metrics.risk_distribution_by_gender}>
+                <CartesianGrid strokeDasharray="3 3" vertical={false} stroke="#e2e8f0" />
+                <XAxis dataKey="category" tick={{ fill: "#64748b", fontSize: 12 }} />
+                <YAxis tick={{ fill: "#64748b", fontSize: 12 }} />
+                <Tooltip contentStyle={{ borderRadius: "8px", border: "1px solid #e2e8f0" }} />
+                <Legend />
+                <Bar
+                  dataKey="female"
+                  name="Female"
+                  fill={GENDER_COLORS.female}
+                  stackId="a"
+                />
+                <Bar dataKey="male" name="Male" fill={GENDER_COLORS.male} stackId="a" />
+                <Bar
+                  dataKey="unknown"
+                  name="Unknown"
+                  fill={GENDER_COLORS.unknown}
+                  stackId="a"
+                />
+              </BarChart>
+            </ResponsiveContainer>
+          )}
+        </section>
 
         {/* Fairness trend */}
         <section className="mb-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="text-lg font-bold text-slate-900">Fairness Trend</h2>
           <p className="mb-6 text-sm text-slate-500">
-            Monthly fairness index and demographic parity delta (lower parity delta is better)
+            Daily demographic parity score and fairness gap (lower gap is better)
           </p>
-          <ResponsiveContainer width="100%" height={280}>
-            <LineChart data={fairnessTrend}>
-              <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
-              <XAxis dataKey="month" tick={{ fill: "#64748b", fontSize: 12 }} />
-              <YAxis
-                yAxisId="left"
-                domain={[0.8, 1]}
-                tick={{ fill: "#64748b", fontSize: 12 }}
-              />
-              <YAxis
-                yAxisId="right"
-                orientation="right"
-                domain={[0, 0.15]}
-                tick={{ fill: "#64748b", fontSize: 12 }}
-              />
-              <Tooltip contentStyle={{ borderRadius: "8px", border: "1px solid #e2e8f0" }} />
-              <Legend />
-              <ReferenceLine
-                yAxisId="left"
-                y={0.85}
-                stroke="#059669"
-                strokeDasharray="4 4"
-                label={{ value: "Min fairness", fill: "#059669", fontSize: 10 }}
-              />
-              <Line
-                yAxisId="left"
-                type="monotone"
-                dataKey="fairnessIndex"
-                name="Fairness Index"
-                stroke="#7c3aed"
-                strokeWidth={2}
-                dot={{ r: 4 }}
-              />
-              <Line
-                yAxisId="right"
-                type="monotone"
-                dataKey="parityDelta"
-                name="Parity Δ"
-                stroke="#dc2626"
-                strokeWidth={2}
-                dot={{ r: 4 }}
-              />
-            </LineChart>
-          </ResponsiveContainer>
+          {loading ? (
+            <ChartSpinner height={280} />
+          ) : fairnessTrendChart.length === 0 ? (
+            <EmptyChart message="No trend data for the selected period." height={280} />
+          ) : (
+            <ResponsiveContainer width="100%" height={280}>
+              <LineChart data={fairnessTrendChart}>
+                <CartesianGrid strokeDasharray="3 3" stroke="#e2e8f0" />
+                <XAxis dataKey="label" tick={{ fill: "#64748b", fontSize: 12 }} />
+                <YAxis
+                  yAxisId="left"
+                  domain={[0, 1]}
+                  tick={{ fill: "#64748b", fontSize: 12 }}
+                />
+                <YAxis
+                  yAxisId="right"
+                  orientation="right"
+                  domain={[0, "auto"]}
+                  tick={{ fill: "#64748b", fontSize: 12 }}
+                />
+                <Tooltip
+                  labelFormatter={(_, payload) =>
+                    String(payload?.[0]?.payload?.fullDate ?? "")
+                  }
+                  contentStyle={{ borderRadius: "8px", border: "1px solid #e2e8f0" }}
+                />
+                <Legend />
+                <ReferenceLine
+                  yAxisId="left"
+                  y={0.85}
+                  stroke="#059669"
+                  strokeDasharray="4 4"
+                  label={{ value: "Min fairness", fill: "#059669", fontSize: 10 }}
+                />
+                <Line
+                  yAxisId="left"
+                  type="monotone"
+                  dataKey="fairnessIndex"
+                  name="Parity Score"
+                  stroke="#7c3aed"
+                  strokeWidth={2}
+                  dot={{ r: 3 }}
+                />
+                <Line
+                  yAxisId="right"
+                  type="monotone"
+                  dataKey="parityDelta"
+                  name="Fairness Gap"
+                  stroke="#dc2626"
+                  strokeWidth={2}
+                  dot={{ r: 3 }}
+                />
+              </LineChart>
+            </ResponsiveContainer>
+          )}
         </section>
 
         {/* Bias indicators + compliance */}
         <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
           <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
             <div className="mb-5 flex items-center justify-between">
-              <h2 className="text-lg font-bold text-slate-900">Bias Detection Indicators</h2>
-              <span className="rounded-full bg-amber-100 px-2.5 py-1 text-xs font-semibold text-amber-800">
-                1 action required
-              </span>
-            </div>
-            <div className="space-y-3">
-              {biasIndicators.map((b) => (
-                <div
-                  key={b.id}
-                  className="rounded-xl border border-slate-100 bg-slate-50/80 p-4"
+              <h2 className="text-lg font-bold text-slate-900">Bias Drift Indicators</h2>
+              {!loading && (
+                <span
+                  className={`rounded-full px-2.5 py-1 text-xs font-semibold ${
+                    actionRequiredCount > 0
+                      ? "bg-red-100 text-red-800"
+                      : "bg-emerald-100 text-emerald-800"
+                  }`}
                 >
-                  <div className="flex flex-wrap items-center justify-between gap-2">
-                    <div className="flex items-center gap-2">
-                      <span className="font-mono text-xs text-slate-500">{b.id}</span>
-                      <span className="font-semibold text-slate-900">{b.attribute}</span>
-                    </div>
-                    <span
-                      className={`rounded-full border px-2 py-0.5 text-xs font-semibold capitalize ${severityStyle(b.severity)}`}
-                    >
-                      {b.severity}
-                    </span>
-                  </div>
-                  <p className="mt-2 text-sm text-slate-600">{b.message}</p>
-                  <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-500">
-                    <span>
-                      Metric: <strong className="text-slate-700">{b.metric}</strong>
-                    </span>
-                    <span>
-                      Gap: <strong className="text-slate-700">{b.gap}</strong>
-                    </span>
-                    <span
-                      className={
-                        b.status === "action_required"
-                          ? "font-semibold text-red-600"
-                          : b.status === "monitor"
-                          ? "font-semibold text-amber-600"
-                          : "font-semibold text-emerald-600"
-                      }
-                    >
-                      {b.status.replace(/_/g, " ")}
-                    </span>
-                  </div>
-                </div>
-              ))}
+                  {actionRequiredCount > 0
+                    ? `${actionRequiredCount} action required`
+                    : "Within thresholds"}
+                </span>
+              )}
             </div>
+            {loading ? (
+              <div className="py-8 text-center text-slate-500">Loading indicators…</div>
+            ) : !trends?.bias_drift_indicators.length ? (
+              <p className="text-sm text-slate-500 py-6">
+                No drift indicators — insufficient historical window for comparison.
+              </p>
+            ) : (
+              <div className="space-y-3">
+                {trends.bias_drift_indicators.map((b) => (
+                  <div
+                    key={b.indicator_id}
+                    className="rounded-xl border border-slate-100 bg-slate-50/80 p-4"
+                  >
+                    <div className="flex flex-wrap items-center justify-between gap-2">
+                      <div className="flex items-center gap-2">
+                        <span className="font-mono text-xs text-slate-500">
+                          {b.indicator_id}
+                        </span>
+                        <span className="font-semibold text-slate-900 capitalize">
+                          {b.attribute}
+                        </span>
+                      </div>
+                      <span
+                        className={`rounded-full border px-2 py-0.5 text-xs font-semibold capitalize ${severityStyle(b.severity)}`}
+                      >
+                        {b.severity}
+                      </span>
+                    </div>
+                    <p className="mt-2 text-sm text-slate-600">{b.message}</p>
+                    <div className="mt-2 flex flex-wrap gap-3 text-xs text-slate-500">
+                      <span>
+                        Metric: <strong className="text-slate-700">{b.metric}</strong>
+                      </span>
+                      <span>
+                        Drift: <strong className="text-slate-700">{b.drift_delta.toFixed(3)}</strong>
+                      </span>
+                      <span
+                        className={
+                          b.status === "action_required"
+                            ? "font-semibold text-red-600"
+                            : b.status === "monitor"
+                            ? "font-semibold text-amber-600"
+                            : "font-semibold text-emerald-600"
+                        }
+                      >
+                        {b.status.replace(/_/g, " ")}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
           </section>
 
           <section className="rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 to-white p-6 shadow-sm">
@@ -567,105 +807,171 @@ export default function FairnessPage() {
               ))}
             </div>
             <div className="mt-4 rounded-lg border border-violet-200 bg-violet-50/50 p-3 text-xs text-violet-900">
-              <strong>Next scheduled review:</strong> {auditMeta.nextReview} · Responsible AI
-              committee sign-off required for production deployment.
+              <strong>Telemetry:</strong> fairness metrics computed from PostgreSQL
+              prediction logs · Responsible AI committee sign-off required for production
+              deployment.
             </div>
           </section>
         </div>
 
-        {/* Mitigation panel */}
-        <section className="mb-8 rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50/80 to-white p-6 shadow-sm">
-          <h2 className="mb-1 text-lg font-bold text-slate-900">Mitigation Recommendations</h2>
-          <p className="mb-6 text-sm text-slate-600">
-            Prioritized actions from bias audit — assign owners before next model release
-          </p>
-          <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
-            {mitigations.map((m) => (
-              <div
-                key={m.title}
-                className="rounded-xl border border-amber-100 bg-white p-5 shadow-sm"
-              >
-                <span
-                  className={`inline-block rounded-full px-2 py-0.5 text-xs font-bold ${
-                    m.priority === "High"
-                      ? "bg-red-100 text-red-700"
-                      : m.priority === "Medium"
-                      ? "bg-amber-100 text-amber-800"
-                      : "bg-slate-100 text-slate-600"
-                  }`}
+        {/* Mitigations from drift */}
+        {!loading && mitigations.length > 0 && (
+          <section className="mb-8 rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50/80 to-white p-6 shadow-sm">
+            <h2 className="mb-1 text-lg font-bold text-slate-900">
+              Mitigation Recommendations
+            </h2>
+            <p className="mb-6 text-sm text-slate-600">
+              Prioritized actions derived from live bias drift indicators
+            </p>
+            <div className="grid grid-cols-1 gap-4 md:grid-cols-3">
+              {mitigations.map((m) => (
+                <div
+                  key={m.id}
+                  className="rounded-xl border border-amber-100 bg-white p-5 shadow-sm"
                 >
-                  {m.priority} priority
-                </span>
-                <h3 className="mt-3 font-semibold text-slate-900">{m.title}</h3>
-                <p className="mt-2 text-sm text-slate-600 leading-relaxed">{m.action}</p>
-                <div className="mt-4 border-t border-slate-100 pt-3 text-xs text-slate-500">
-                  <p>
-                    Owner: <span className="font-medium text-slate-700">{m.owner}</span>
-                  </p>
-                  <p className="mt-1">
-                    Target: <span className="font-medium text-slate-700">{m.eta}</span>
-                  </p>
+                  <span
+                    className={`inline-block rounded-full px-2 py-0.5 text-xs font-bold ${
+                      m.priority === "High"
+                        ? "bg-red-100 text-red-700"
+                        : m.priority === "Medium"
+                        ? "bg-amber-100 text-amber-800"
+                        : "bg-slate-100 text-slate-600"
+                    }`}
+                  >
+                    {m.priority} priority
+                  </span>
+                  <h3 className="mt-3 font-semibold text-slate-900">{m.title}</h3>
+                  <p className="mt-2 text-sm text-slate-600 leading-relaxed">{m.action}</p>
+                  <div className="mt-4 border-t border-slate-100 pt-3 text-xs text-slate-500">
+                    <p>
+                      Owner: <span className="font-medium text-slate-700">{m.owner}</span>
+                    </p>
+                    <p className="mt-1">
+                      Target: <span className="font-medium text-slate-700">{m.eta}</span>
+                    </p>
+                  </div>
                 </div>
-              </div>
-            ))}
-          </div>
-        </section>
+              ))}
+            </div>
+          </section>
+        )}
 
         {/* Protected attribute table */}
         <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
           <h2 className="mb-1 text-lg font-bold text-slate-900">
-            Protected Attribute Comparison
+            Protected Group Analytics
           </h2>
           <p className="mb-6 text-sm text-slate-500">
-            Performance and disparity metrics across federally protected and institutional
-            sensitive attributes
+            Live performance and disparity metrics from stored prediction cohorts
           </p>
-          <div className="overflow-x-auto">
-            <table className="min-w-full text-left text-sm">
-              <thead>
-                <tr className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wider text-slate-600">
-                  <th className="py-3 pl-4 pr-2 font-bold">Attribute</th>
-                  <th className="px-2 py-3 font-bold">Sample Size</th>
-                  <th className="px-2 py-3 font-bold">Positive Rate</th>
-                  <th className="px-2 py-3 font-bold">TPR</th>
-                  <th className="px-2 py-3 font-bold">FPR</th>
-                  <th className="px-2 py-3 font-bold">Parity Gap</th>
-                  <th className="px-2 py-3 font-bold">Flag</th>
-                </tr>
-              </thead>
-              <tbody>
-                {protectedAttributeTable.map((row) => (
-                  <tr
-                    key={row.attribute}
-                    className="border-t border-slate-100 hover:bg-slate-50/80 transition"
-                  >
-                    <td className="py-3 pl-4 pr-2 font-medium text-slate-900">
-                      {row.attribute}
-                    </td>
-                    <td className="px-2 text-slate-700">{row.sampleSize}</td>
-                    <td className="px-2 text-slate-700">{row.positiveRate}</td>
-                    <td className="px-2 font-mono text-slate-700">{row.tpr}</td>
-                    <td className="px-2 font-mono text-slate-700">{row.fpr}</td>
-                    <td className="px-2 font-mono text-slate-700">{row.parityGap}</td>
-                    <td className="px-2">
-                      <span
-                        className={`rounded-full px-2 py-0.5 text-xs font-semibold ${flagStyle(row.flag)}`}
-                      >
-                        {row.flag}
-                      </span>
-                    </td>
+          {loading ? (
+            <div className="py-12 text-center">
+              <div className="h-8 w-8 border-4 border-violet-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
+              <p className="text-slate-500">Loading protected group statistics…</p>
+            </div>
+          ) : protectedTableRows.length === 0 ? (
+            <p className="py-10 text-center text-slate-500">
+              No protected-group records yet. Run predictions to populate analytics.
+            </p>
+          ) : (
+            <div className="overflow-x-auto">
+              <table className="min-w-full text-left text-sm">
+                <thead>
+                  <tr className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wider text-slate-600">
+                    <th className="py-3 pl-4 pr-2 font-bold">Attribute</th>
+                    <th className="px-2 py-3 font-bold">Sample Size</th>
+                    <th className="px-2 py-3 font-bold">Positive Rate</th>
+                    <th className="px-2 py-3 font-bold">Avg Risk</th>
+                    <th className="px-2 py-3 font-bold">Avg Age</th>
+                    <th className="px-2 py-3 font-bold">Parity Gap</th>
+                    <th className="px-2 py-3 font-bold">Flag</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
-          </div>
+                </thead>
+                <tbody>
+                  {protectedTableRows.map((row) => (
+                    <tr
+                      key={row.key}
+                      className="border-t border-slate-100 hover:bg-slate-50/80 transition"
+                    >
+                      <td className="py-3 pl-4 pr-2 font-medium text-slate-900">
+                        {row.attribute}
+                      </td>
+                      <td className="px-2 text-slate-700">{row.sampleSize}</td>
+                      <td className="px-2 text-slate-700">{row.positiveRate}</td>
+                      <td className="px-2 font-mono text-slate-700">{row.avgRisk}</td>
+                      <td className="px-2 text-slate-700">{row.avgAge}</td>
+                      <td className="px-2 font-mono text-slate-700">{row.parityGap}</td>
+                      <td className="px-2">
+                        <span
+                          className={`rounded-full px-2 py-0.5 text-xs font-semibold ${flagStyle(row.flag)}`}
+                        >
+                          {row.flag}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          )}
         </section>
 
         <p className="mt-8 text-center text-xs text-slate-400">
-          Mock fairness analytics for federated healthcare AI governance. Not a substitute for
-          formal regulatory bias assessment or legal compliance review.
+          Live fairness telemetry from federated healthcare prediction logs. For formal
+          regulatory bias assessment, engage your institutional compliance and legal review
+          process.
         </p>
       </div>
     </Layout>
   );
+}
+
+function ChartSpinner({ height = 300 }: { height?: number }) {
+  return (
+    <div
+      className="flex items-center justify-center"
+      style={{ height }}
+    >
+      <div className="h-10 w-10 border-4 border-violet-200 border-t-violet-600 rounded-full animate-spin" />
+    </div>
+  );
+}
+
+function EmptyChart({ message, height = 300 }: { message: string; height?: number }) {
+  return (
+    <div
+      className="flex items-center justify-center text-slate-500 text-sm"
+      style={{ height }}
+    >
+      {message}
+    </div>
+  );
+}
+
+function buildTableRow(stat: ProtectedGroupStat, popRate: number) {
+  const gap = stat.positive_prediction_rate - popRate;
+  return {
+    key: `gender-${stat.group}`,
+    attribute: `${stat.attribute} — ${stat.group}`,
+    sampleSize: stat.count.toLocaleString(),
+    positiveRate: `${(stat.positive_prediction_rate * 100).toFixed(1)}%`,
+    avgRisk: stat.average_risk_score.toFixed(3),
+    avgAge: stat.average_age.toFixed(1),
+    parityGap: gap >= 0 ? `+${gap.toFixed(2)}` : gap.toFixed(2),
+    flag: flagFromGap(gap),
+  };
+}
+
+function buildAgeTableRow(sub: SubgroupPositiveRate, popRate: number) {
+  const gap = sub.positive_prediction_rate - popRate;
+  return {
+    key: `age-${sub.group}`,
+    attribute: `age — ${sub.group}`,
+    sampleSize: sub.count.toLocaleString(),
+    positiveRate: `${(sub.positive_prediction_rate * 100).toFixed(1)}%`,
+    avgRisk: "—",
+    avgAge: "—",
+    parityGap: gap >= 0 ? `+${gap.toFixed(2)}` : gap.toFixed(2),
+    flag: flagFromGap(gap),
+  };
 }

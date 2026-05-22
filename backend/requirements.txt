@@ -14,6 +14,10 @@ bcrypt==5.0.0
 
 # Database
 sqlalchemy==2.0.49
+psycopg2-binary==2.9.11
+
+# Configuration
+python-dotenv==1.2.1
 
 # ML stack (predictor, SHAP explainability)
 numpy==2.4.6

@@ -1,5 +1,6 @@
 from sqlalchemy.orm import Session
 
+from config import settings
 from database.models import PredictionLog
 
 
@@ -34,7 +35,7 @@ def create_prediction_log(
             "risk_category"
         ],
 
-        model_version="FTTransformer_v1"
+        model_version=settings.default_model_version,
     )
 
     db.add(log)

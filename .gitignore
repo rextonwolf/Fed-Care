@@ -94,6 +94,7 @@ package-lock.json.bak
 .env
 .env.*
 !.env.example
+!backend/.env.example
 *.pem
 *.key
 secrets/

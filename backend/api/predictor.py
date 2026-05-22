@@ -11,6 +11,7 @@ sys.path.append(
 )
 
 from model import FTTransformer
+from config import settings
 
 
 # Device
@@ -19,10 +20,10 @@ DEVICE = torch.device(
 )
 
 
-# Paths
-MODEL_PATH = "../models/global_federated_model.pth"
+# Paths — override via MODEL_PATH / SCALER_PATH in .env
+MODEL_PATH = settings.model_path
 
-SCALER_PATH = "../scalers/scaler.joblib"
+SCALER_PATH = settings.scaler_path
 
 
 # Load scaler

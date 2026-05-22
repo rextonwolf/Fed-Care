@@ -1,36 +1,31 @@
-import os
+"""
+JWT token creation and validation.
+Secret key and algorithm are loaded from environment via config.settings.
+"""
 
-from jose import jwt
 from datetime import datetime
 from datetime import timedelta
 
+from jose import jwt
 
-SECRET_KEY = os.getenv("JWT_SECRET_KEY", "SUPER_SECRET_ENTERPRISE_KEY")
-
-ALGORITHM = "HS256"
+from config import settings
 
 
-def create_access_token(data):
-
+def create_access_token(data: dict) -> str:
     to_encode = data.copy()
-
-    expire = datetime.utcnow() + timedelta(hours=12)
-
-    to_encode.update({
-        "exp": expire
-    })
+    expire = datetime.utcnow() + timedelta(hours=settings.jwt_expire_hours)
+    to_encode.update({"exp": expire})
 
     return jwt.encode(
         to_encode,
-        SECRET_KEY,
-        algorithm=ALGORITHM
+        settings.jwt_secret_key,
+        algorithm=settings.jwt_algorithm,
     )
 
 
-def decode_token(token):
-
+def decode_token(token: str) -> dict:
     return jwt.decode(
         token,
-        SECRET_KEY,
-        algorithms=[ALGORITHM]
+        settings.jwt_secret_key,
+        algorithms=[settings.jwt_algorithm],
     )

@@ -12,8 +12,14 @@ from sqlalchemy import func
 from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
+from backend.database.models import Hospital
 from backend.database.models import Patient
 from backend.database.models import PredictionLog
+
+
+def _default_hospital_id(db: Session) -> int | None:
+    hospital = db.query(Hospital).order_by(Hospital.id.asc()).first()
+    return hospital.id if hospital else None
 
 
 def create_patient(
@@ -21,12 +27,14 @@ def create_patient(
     display_name: str,
     medical_record_number: Optional[str] = None,
     notes: Optional[str] = None,
+    hospital_id: Optional[int] = None,
 ) -> Patient:
     patient = Patient(
         patient_uid=str(uuid.uuid4()),
         display_name=display_name,
         medical_record_number=medical_record_number,
         notes=notes,
+        hospital_id=(hospital_id if hospital_id is not None else _default_hospital_id(db)),
     )
     db.add(patient)
     db.commit()
@@ -34,22 +42,25 @@ def create_patient(
     return patient
 
 
-def get_patient(db: Session, patient_id: int) -> Optional[Patient]:
-    return db.query(Patient).filter(Patient.id == patient_id).first()
+def get_patient(db: Session, patient_id: int, hospital_id: Optional[int] = None) -> Optional[Patient]:
+    q = db.query(Patient).filter(Patient.id == patient_id)
+    if hospital_id is not None:
+        q = q.filter(Patient.hospital_id == hospital_id)
+    return q.first()
 
 
-def get_patient_by_uid(db: Session, patient_uid: str) -> Optional[Patient]:
-    return (
-        db.query(Patient)
-        .filter(Patient.patient_uid == patient_uid.strip())
-        .first()
-    )
+def get_patient_by_uid(db: Session, patient_uid: str, hospital_id: Optional[int] = None) -> Optional[Patient]:
+    q = db.query(Patient).filter(Patient.patient_uid == patient_uid.strip())
+    if hospital_id is not None:
+        q = q.filter(Patient.hospital_id == hospital_id)
+    return q.first()
 
 
 def search_patients(
     db: Session,
     query: str,
     limit: int = 20,
+    hospital_id: Optional[int] = None,
 ) -> List[Patient]:
     """
     Search by display name (partial), patient UUID, or MRN.
@@ -66,26 +77,22 @@ def search_patients(
     ]
 
     # Prefer exact UUID hit when query looks like a full UUID
-    exact_uid = get_patient_by_uid(db, q)
+    exact_uid = get_patient_by_uid(db, q, hospital_id=hospital_id)
     if exact_uid:
         return [exact_uid]
 
-    return (
-        db.query(Patient)
-        .filter(or_(*filters))
-        .order_by(desc(Patient.updated_at))
-        .limit(limit)
-        .all()
-    )
+    q = db.query(Patient).filter(or_(*filters))
+    if hospital_id is not None:
+        q = q.filter(Patient.hospital_id == hospital_id)
+
+    return q.order_by(desc(Patient.updated_at)).limit(limit).all()
 
 
-def list_patients(db: Session, limit: int = 100) -> List[Patient]:
-    return (
-        db.query(Patient)
-        .order_by(desc(Patient.updated_at))
-        .limit(limit)
-        .all()
-    )
+def list_patients(db: Session, limit: int = 100, hospital_id: Optional[int] = None) -> List[Patient]:
+    q = db.query(Patient)
+    if hospital_id is not None:
+        q = q.filter(Patient.hospital_id == hospital_id)
+    return q.order_by(desc(Patient.updated_at)).limit(limit).all()
 
 
 def update_patient(
@@ -111,31 +118,26 @@ def get_patient_predictions(
     db: Session,
     patient_id: int,
     limit: int = 50,
+    hospital_id: Optional[int] = None,
 ) -> List[PredictionLog]:
-    return (
-        db.query(PredictionLog)
-        .filter(PredictionLog.patient_id == patient_id)
-        .order_by(desc(PredictionLog.timestamp))
-        .limit(limit)
-        .all()
-    )
+    q = db.query(PredictionLog).filter(PredictionLog.patient_id == patient_id)
+    if hospital_id is not None:
+        q = q.filter(PredictionLog.hospital_id == hospital_id)
+    return q.order_by(desc(PredictionLog.timestamp)).limit(limit).all()
 
 
-def patient_summary_stats(db: Session, patient_id: int) -> dict:
-    row = (
-        db.query(
-            func.count(PredictionLog.id).label("count"),
-            func.max(PredictionLog.timestamp).label("last_ts"),
-        )
-        .filter(PredictionLog.patient_id == patient_id)
-        .one()
-    )
-    latest = (
-        db.query(PredictionLog)
-        .filter(PredictionLog.patient_id == patient_id)
-        .order_by(desc(PredictionLog.timestamp))
-        .first()
-    )
+def patient_summary_stats(db: Session, patient_id: int, hospital_id: Optional[int] = None) -> dict:
+    q = db.query(
+        func.count(PredictionLog.id).label("count"),
+        func.max(PredictionLog.timestamp).label("last_ts"),
+    ).filter(PredictionLog.patient_id == patient_id)
+    if hospital_id is not None:
+        q = q.filter(PredictionLog.hospital_id == hospital_id)
+    row = q.one()
+    latest_q = db.query(PredictionLog).filter(PredictionLog.patient_id == patient_id)
+    if hospital_id is not None:
+        latest_q = latest_q.filter(PredictionLog.hospital_id == hospital_id)
+    latest = latest_q.order_by(desc(PredictionLog.timestamp)).first()
     return {
         "prediction_count": int(row.count or 0),
         "last_prediction_at": row.last_ts,

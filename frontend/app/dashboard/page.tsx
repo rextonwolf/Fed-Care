@@ -1,6 +1,6 @@
 "use client";
 
-import { useCallback, useEffect, useState } from "react";
+import { FormEvent, useCallback, useEffect, useState } from "react";
 import { motion } from "framer-motion";
 import Layout from "../components/Layout";
 import {
@@ -24,6 +24,11 @@ import {
   type DashboardData,
   type RecentActivityItem,
 } from "../../lib/analytics";
+import {
+  fetchDatasetUploads,
+  uploadDatasetFile,
+  type DatasetUpload,
+} from "../../lib/datasets";
 import { isAuthenticated } from "../../lib/auth";
 import {
   StaggerContainer,
@@ -102,6 +107,12 @@ export default function DashboardPage() {
   const [refreshing, setRefreshing] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [uploads, setUploads] = useState<DatasetUpload[]>([]);
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [uploadStatus, setUploadStatus] = useState<"idle" | "uploading" | "success" | "error">("idle");
+  const [uploadProgress, setUploadProgress] = useState(0);
+  const [uploadError, setUploadError] = useState<string | null>(null);
+  const [uploadSuccessMessage, setUploadSuccessMessage] = useState<string | null>(null);
 
   const loadDashboard = useCallback(async (isRefresh = false) => {
     if (!isAuthenticated() || !hasAuthToken()) {
@@ -141,11 +152,55 @@ export default function DashboardPage() {
     }
   }, [router]);
 
+  const loadUploads = useCallback(async () => {
+    try {
+      const result = await fetchDatasetUploads();
+      setUploads(result);
+    } catch (err: unknown) {
+      setUploadError(
+        err instanceof Error ? err.message : "Unable to fetch uploads."
+      );
+    }
+  }, []);
+
+  const handleUpload = async (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    setUploadError(null);
+    setUploadSuccessMessage(null);
+
+    if (!selectedFile) {
+      setUploadError("Select a CSV file before uploading.");
+      return;
+    }
+
+    setUploadStatus("uploading");
+    setUploadProgress(0);
+
+    try {
+      await uploadDatasetFile(selectedFile, (percentage) => {
+        setUploadProgress(percentage);
+      });
+
+      setUploadStatus("success");
+      setUploadSuccessMessage(
+        `Dataset ${selectedFile.name} uploaded for federated simulation.`
+      );
+      setSelectedFile(null);
+      setUploadProgress(100);
+      await loadUploads();
+    } catch (uploadError: unknown) {
+      const message = uploadError instanceof Error ? uploadError.message : "Upload failed.";
+      setUploadStatus("error");
+      setUploadError(message);
+    }
+  };
+
   useEffect(() => {
     loadDashboard(false);
+    loadUploads();
     const intervalId = setInterval(() => loadDashboard(true), REFRESH_INTERVAL_MS);
     return () => clearInterval(intervalId);
-  }, [loadDashboard]);
+  }, [loadDashboard, loadUploads]);
 
   const metrics = data?.metrics;
   const analytics = data?.analytics;
@@ -410,6 +465,99 @@ export default function DashboardPage() {
             )}
           </AnimatedCard>
         </div>
+
+        <AnimatedCard delay={0.24} className="liquid-glass-panel soft-hover glow-hover">
+          <div className="flex flex-col md:flex-row md:items-start md:justify-between gap-4 mb-6">
+            <div>
+              <h2 className="ds-heading-card text-sky-950">Validated Dataset Upload</h2>
+              <p className="ds-text-support mt-2 max-w-xl">
+                Validated local hospital records prepared for federated training rounds.
+                Upload sanitized CSV datasets from your local hospital for future simulation and enterprise readiness.
+              </p>
+            </div>
+            <span className="status-pill status-pill--primary">Premium feature</span>
+          </div>
+
+          <form onSubmit={handleUpload} className="grid gap-4">
+            <label className="block">
+              <span className="text-sm font-semibold text-sky-900">Choose CSV file</span>
+              <input
+                type="file"
+                accept=".csv"
+                onChange={(event) => {
+                  setSelectedFile(event.target.files?.[0] ?? null);
+                  setUploadError(null);
+                  setUploadSuccessMessage(null);
+                  setUploadStatus("idle");
+                  setUploadProgress(0);
+                }}
+                className="mt-3 block w-full text-sm text-sky-950 file:rounded-full file:border-0 file:px-4 file:py-2 file:bg-sky-800 file:text-white file:shadow-lg file:shadow-sky-500/20"
+              />
+            </label>
+
+            <div className="flex flex-col gap-3">
+              <button
+                type="submit"
+                disabled={uploadStatus === "uploading" || !selectedFile}
+                className="btn-liquid-primary w-full md:w-auto"
+              >
+                {uploadStatus === "uploading" ? "Uploading…" : "Upload dataset"}
+              </button>
+
+              <div className="h-2 rounded-full bg-sky-100 overflow-hidden">
+                <div
+                  className="h-full bg-gradient-to-r from-cyan-400 to-sky-700 transition-all duration-300"
+                  style={{ width: `${uploadProgress}%` }}
+                />
+              </div>
+              <div className="flex items-center justify-between text-xs text-sky-700/80">
+                <span>{uploadProgress}% complete</span>
+                <span>{uploadStatus === "success" ? "Ready for federation" : "CSV only"}</span>
+              </div>
+            </div>
+
+            {uploadError && (
+              <div className="rounded-2xl bg-rose-50 border border-rose-200 p-4 text-rose-700">
+                {uploadError}
+              </div>
+            )}
+            {uploadSuccessMessage && (
+              <div className="rounded-2xl bg-emerald-50 border border-emerald-200 p-4 text-emerald-700">
+                {uploadSuccessMessage}
+              </div>
+            )}
+          </form>
+
+          <div className="mt-8">
+            <p className="ds-label-telemetry mb-3">Recent dataset uploads</p>
+            {uploads.length === 0 ? (
+              <div className="rounded-3xl border border-sky-200/90 bg-sky-100/20 p-5 text-sky-900">
+                No validated uploads yet. Hospital users will see only their own datasets.
+              </div>
+            ) : (
+              <div className="grid gap-3">
+                {uploads.map((upload) => (
+                  <div
+                    key={upload.id}
+                    className="rounded-3xl border border-sky-200/70 bg-white/80 p-4 shadow-sm"
+                  >
+                    <div className="flex items-center justify-between gap-4">
+                      <div>
+                        <p className="font-semibold text-sky-950">{upload.filename}</p>
+                        <p className="text-xs text-sky-700 mt-1">
+                          Uploaded by {upload.uploaded_by}
+                        </p>
+                      </div>
+                      <span className="text-xs text-sky-500">
+                        {new Date(upload.upload_timestamp).toLocaleString()}
+                      </span>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        </AnimatedCard>
 
         <AnimatedCard delay={0.24} className="liquid-glass-panel soft-hover glow-hover">
           <div className="flex items-center justify-between mb-6">

@@ -37,11 +37,15 @@ def _iso(dt) -> str:
 def _to_summary(db: Session, patient) -> PatientSummary:
     stats = pc.patient_summary_stats(db, patient.id)
     latest = stats["latest"]
+    hospital_name = None
+    if getattr(patient, "hospital", None) is not None:
+        hospital_name = getattr(patient.hospital, "name", None)
     return PatientSummary(
         id=patient.id,
         patient_uid=patient.patient_uid,
         display_name=patient.display_name,
         medical_record_number=patient.medical_record_number,
+        hospital_name=hospital_name,
         prediction_count=stats["prediction_count"],
         latest_risk_probability=latest.risk_probability if latest else None,
         latest_risk_category=latest.risk_category if latest else None,
@@ -59,22 +63,31 @@ def _to_detail(db: Session, patient) -> PatientDetail:
     )
 
 
-def create_patient_record(db: Session, payload: PatientCreate) -> PatientDetail:
+def create_patient_record(db: Session, payload: PatientCreate, current_user: dict | None = None) -> PatientDetail:
     try:
+        hospital_id = None
+        if current_user and current_user.get("role") != "admin":
+            hospital_id = current_user.get("hospital_id")
+
         patient = pc.create_patient(
             db,
             display_name=payload.display_name,
             medical_record_number=payload.medical_record_number,
             notes=payload.notes,
+            hospital_id=hospital_id,
         )
         return _to_detail(db, patient)
     except SQLAlchemyError as exc:
         _handle_db_error(exc)
 
 
-def list_patient_records(db: Session) -> PatientListResponse:
+def list_patient_records(db: Session, current_user: dict | None = None) -> PatientListResponse:
     try:
-        patients = pc.list_patients(db)
+        hospital_id = None
+        if current_user and current_user.get("role") != "admin":
+            hospital_id = current_user.get("hospital_id")
+
+        patients = pc.list_patients(db, hospital_id=hospital_id)
         return PatientListResponse(
             patients=[_to_summary(db, p) for p in patients],
             count=len(patients),
@@ -83,9 +96,13 @@ def list_patient_records(db: Session) -> PatientListResponse:
         _handle_db_error(exc)
 
 
-def get_patient_detail(db: Session, patient_id: int) -> PatientDetail:
+def get_patient_detail(db: Session, patient_id: int, current_user: dict | None = None) -> PatientDetail:
     try:
-        patient = pc.get_patient(db, patient_id)
+        hospital_id = None
+        if current_user and current_user.get("role") != "admin":
+            hospital_id = current_user.get("hospital_id")
+
+        patient = pc.get_patient(db, patient_id, hospital_id=hospital_id)
         if not patient:
             raise HTTPException(status_code=404, detail="Patient not found")
         return _to_detail(db, patient)
@@ -99,13 +116,18 @@ def get_patient_history(
     db: Session,
     patient_id: int,
     limit: int = 50,
+    current_user: dict | None = None,
 ) -> PatientHistoryResponse:
     try:
-        patient = pc.get_patient(db, patient_id)
+        hospital_id = None
+        if current_user and current_user.get("role") != "admin":
+            hospital_id = current_user.get("hospital_id")
+
+        patient = pc.get_patient(db, patient_id, hospital_id=hospital_id)
         if not patient:
             raise HTTPException(status_code=404, detail="Patient not found")
 
-        logs = pc.get_patient_predictions(db, patient_id, limit=limit)
+        logs = pc.get_patient_predictions(db, patient_id, limit=limit, hospital_id=hospital_id)
         predictions = []
         risk_trend = []
 
@@ -120,9 +142,16 @@ def get_patient_history(
                     source=log.source or "manual",
                     timestamp=ts,
                     age=log.age,
+                    gender=log.gender,
+                    height=log.height,
+                    weight=log.weight,
                     ap_hi=log.ap_hi,
                     ap_lo=log.ap_lo,
                     cholesterol=log.cholesterol,
+                    gluc=log.gluc,
+                    smoke=log.smoke,
+                    alco=log.alco,
+                    active=log.active,
                 )
             )
 
@@ -152,9 +181,14 @@ def update_patient_record(
     db: Session,
     patient_id: int,
     payload: PatientUpdate,
+    current_user: dict | None = None,
 ) -> PatientDetail:
     try:
-        patient = pc.get_patient(db, patient_id)
+        hospital_id = None
+        if current_user and current_user.get("role") != "admin":
+            hospital_id = current_user.get("hospital_id")
+
+        patient = pc.get_patient(db, patient_id, hospital_id=hospital_id)
         if not patient:
             raise HTTPException(status_code=404, detail="Patient not found")
         updated = pc.update_patient(

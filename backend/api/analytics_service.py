@@ -28,17 +28,21 @@ def _handle_db_error(exc: Exception) -> None:
     ) from exc
 
 
-def get_system_metrics(db: Session) -> SystemMetricsResponse:
+def get_system_metrics(db: Session, current_user: dict | None = None) -> SystemMetricsResponse:
     try:
-        total = aq.count_predictions(db)
-        high_risk = aq.count_high_risk(db)
-        low_risk = aq.count_low_risk(db)
-        avg_risk = aq.average_risk_score(db)
-        model_version = aq.latest_model_version(db)
+        hospital_id = None
+        if current_user and current_user.get("role") != "admin":
+            hospital_id = current_user.get("hospital_id")
+
+        total = aq.count_predictions(db, hospital_id=hospital_id)
+        high_risk = aq.count_high_risk(db, hospital_id=hospital_id)
+        low_risk = aq.count_low_risk(db, hospital_id=hospital_id)
+        avg_risk = aq.average_risk_score(db, hospital_id=hospital_id)
+        model_version = aq.latest_model_version(db, hospital_id=hospital_id)
 
         if total == 0:
             system_status = "initializing"
-        elif aq.recent_prediction_within_hours(db, hours=24):
+        elif aq.recent_prediction_within_hours(db, hours=24, hospital_id=hospital_id):
             system_status = "operational"
         else:
             system_status = "idle"
@@ -56,9 +60,13 @@ def get_system_metrics(db: Session) -> SystemMetricsResponse:
         _handle_db_error(exc)
 
 
-def get_prediction_analytics(db: Session) -> PredictionAnalyticsResponse:
+def get_prediction_analytics(db: Session, current_user: dict | None = None) -> PredictionAnalyticsResponse:
     try:
-        distribution_raw = aq.risk_distribution_counts(db)
+        hospital_id = None
+        if current_user and current_user.get("role") != "admin":
+            hospital_id = current_user.get("hospital_id")
+
+        distribution_raw = aq.risk_distribution_counts(db, hospital_id=hospital_id)
         total = sum(distribution_raw.values()) or 1
 
         risk_distribution = []
@@ -71,8 +79,8 @@ def get_prediction_analytics(db: Session) -> PredictionAnalyticsResponse:
                 )
             )
 
-        vitals = aq.average_vitals(db)
-        trends_raw = aq.prediction_trends_by_day(db)
+        vitals = aq.average_vitals(db, hospital_id=hospital_id)
+        trends_raw = aq.prediction_trends_by_day(db, hospital_id=hospital_id)
 
         return PredictionAnalyticsResponse(
             risk_distribution=risk_distribution,
@@ -93,9 +101,14 @@ def get_prediction_analytics(db: Session) -> PredictionAnalyticsResponse:
 def get_recent_activity(
     db: Session,
     limit: int = 50,
+    current_user: dict | None = None,
 ) -> RecentActivityResponse:
     try:
-        logs = aq.fetch_recent_logs(db, limit=limit)
+        hospital_id = None
+        if current_user and current_user.get("role") != "admin":
+            hospital_id = current_user.get("hospital_id")
+
+        logs = aq.fetch_recent_logs(db, limit=limit, hospital_id=hospital_id)
         activities = []
 
         for log in logs:

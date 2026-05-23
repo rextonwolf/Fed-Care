@@ -6,6 +6,7 @@ export type PatientSummary = {
   patient_uid: string;
   display_name: string;
   medical_record_number?: string | null;
+  hospital_name?: string | null;
   prediction_count: number;
   latest_risk_probability?: number | null;
   latest_risk_category?: string | null;
@@ -26,9 +27,16 @@ export type PredictionHistoryItem = {
   source: string;
   timestamp?: string | null;
   age?: number | null;
+  gender?: number | null;
+  height?: number | null;
+  weight?: number | null;
   ap_hi?: number | null;
   ap_lo?: number | null;
   cholesterol?: number | null;
+  gluc?: number | null;
+  smoke?: number | null;
+  alco?: number | null;
+  active?: number | null;
 };
 
 export type PatientHistory = {

@@ -1,11 +1,4 @@
-import sys
 import os
-
-sys.path.append(
-    os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "..")
-    )
-)
 
 import torch
 import matplotlib.pyplot as plt
@@ -21,8 +14,8 @@ from sklearn.metrics import (
 
 from torch.utils.data import DataLoader
 
-from cardio_dataset import CardioDataset
-from model import FTTransformer
+from backend.cardio_dataset import CardioDataset
+from backend.model import FTTransformer
 
 
 # Device

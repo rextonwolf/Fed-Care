@@ -133,14 +133,22 @@ class Settings:
     def auth_analyst_password(self) -> str:
         return os.getenv("AUTH_ANALYST_PASSWORD", "analyst123")
 
-    # --- ML artifact paths (relative to backend/api when running uvicorn) ---
+    # --- ML artifact paths (relative to backend/ unless absolute) ---
     @property
     def model_path(self) -> str:
-        return os.getenv("MODEL_PATH", "../models/global_federated_model.pth")
+        return os.getenv("MODEL_PATH", "models/global_federated_model.pth")
 
     @property
     def scaler_path(self) -> str:
-        return os.getenv("SCALER_PATH", "../scalers/scaler.joblib")
+        return os.getenv("SCALER_PATH", "scalers/scaler.joblib")
+
+    @property
+    def feature_names_path(self) -> str:
+        return os.getenv("FEATURE_NAMES_PATH", "scalers/feature_names.joblib")
+
+    @property
+    def feature_medians_path(self) -> str:
+        return os.getenv("FEATURE_MEDIANS_PATH", "scalers/feature_medians.joblib")
 
     @property
     def default_model_version(self) -> str:
@@ -168,6 +176,19 @@ def get_settings() -> Settings:
     instance = Settings()
     _validate(instance)
     return instance
+
+
+def resolve_artifact_path(path: str) -> Path:
+    """
+    Resolve ML artifact paths relative to backend/ (supports legacy ../ prefixes).
+    """
+    p = Path(path)
+    if p.is_absolute():
+        return p
+    normalized = path.replace("\\", "/")
+    if normalized.startswith("../"):
+        return (BACKEND_ROOT / normalized[3:]).resolve()
+    return (BACKEND_ROOT / normalized).resolve()
 
 
 # Singleton used across the backend

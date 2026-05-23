@@ -1,17 +1,18 @@
 from sqlalchemy.orm import Session
 
-from config import settings
-from database.models import PredictionLog
+from backend.config import settings
+from backend.database.models import PredictionLog
 
 
 def create_prediction_log(
     db: Session,
     patient_data,
-    prediction_result
+    prediction_result,
+    source: str = "manual",
 ):
 
     log = PredictionLog(
-
+        patient_id=getattr(patient_data, "patient_id", None),
         age=patient_data.age,
         gender=patient_data.gender,
         height=patient_data.height,
@@ -36,9 +37,17 @@ def create_prediction_log(
         ],
 
         model_version=settings.default_model_version,
+        source=source,
     )
 
     db.add(log)
+
+    if log.patient_id:
+        from backend.database.models import Patient
+        patient = db.query(Patient).filter(Patient.id == log.patient_id).first()
+        if patient:
+            from datetime import datetime
+            patient.updated_at = datetime.utcnow()
 
     db.commit()
 

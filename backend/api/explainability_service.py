@@ -2,18 +2,10 @@
 Explainability service layer — formats SHAP results for the REST API.
 """
 
-import os
-import sys
-
 from fastapi import HTTPException
 
-_BACKEND_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-if _BACKEND_ROOT not in sys.path:
-    sys.path.insert(0, _BACKEND_ROOT)
-
-from schemas import PatientData
-
-from explainability.shap_explainer import explain_patient
+from backend.api.schemas import PatientData
+from backend.explainability.shap_explainer import explain_patient
 
 MODEL_META = {
     "name": "FTTransformer",
@@ -23,9 +15,6 @@ MODEL_META = {
 
 
 def run_explainability(patient: PatientData) -> dict:
-    """
-    Run SHAP explanation and return an enterprise JSON envelope.
-    """
     try:
         explanation = explain_patient(patient)
     except FileNotFoundError as exc:

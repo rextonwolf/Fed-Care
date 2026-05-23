@@ -89,7 +89,56 @@ Infrastructure:
 
 * JWT backend authentication
 * Token-protected APIs
-* Frontend token integration
+* Enterprise login page (`/login`)
+* Session persistence (localStorage)
+* Auth guards + redirect unauthenticated users
+* Logout from sidebar
+
+## Neuro-Symbolic Knowledge Graph (Phase 2)
+
+* Statistical relationship learning (`relationship_extractor.py`)
+* Weighted NetworkX graph (`graph_builder.py`)
+* Graph structural analysis (`graph_analysis.py`)
+* Uncertainty / OOD engine (`uncertainty_engine.py`)
+* Prediction validator vs FT-Transformer (`prediction_validator.py`)
+* Visualization + artifacts (`visualization.py`, `pipeline.py`)
+* `/predict` response includes `neuro_symbolic_validation` when graph is built
+
+Build graph: `python -m backend.knowledge_graph.pipeline` from repository root
+
+## Multi-dataset ML & harmonization
+
+**Datasets (knowledge graph + training):**
+
+| Source | File | Role |
+|--------|------|------|
+| Cardiovascular | `datasets/cardio.csv` | Primary ML cohort (70k+ rows) |
+| UCI heart | `datasets/heart_disease_uci.csv` | Training + KG |
+| Diabetes | `datasets/diabetes.csv` | KG relationships |
+| Kidney | `datasets/kidney_disease.csv` | KG relationships |
+| Symptoms | `datasets/symptom_disease.csv` | Symptom–disease edges |
+| MIMIC-III demo | `datasets/mimic-iii-clinical-database-demo-1.4/` | ICU vitals/labs |
+| MIMIC cohort | `datasets/mimic_cohort.csv` | Generated tabular ICU features |
+
+**Pipeline (from `backend/`):**
+
+```bash
+python -m backend.preprocessing_unified   # 24 features, hospital_a/b/c + test.csv
+python -m backend.training.train          # saves global_federated_model.pth
+python -m backend.knowledge_graph.pipeline
+```
+
+* Shared vocabulary: `backend/clinical_schema.py`
+* Dynamic inference: `backend/api/feature_registry.py` (feature order + median imputation)
+* `/predict` accepts 11 core fields + optional UCI/ICU extensions
+
+## Patient Memory / History (foundation)
+
+* `Patient` PostgreSQL model + `patient_id` on prediction logs
+* REST APIs: `POST/GET /patients`, `GET /patients/{id}/history`
+* Optional `patient_id` on `/predict` for longitudinal tracking
+* Frontend patient registry + risk trend charts
+* Prepared for future PDF report ingestion pipeline
 
 ## Deployment & DevOps
 
@@ -115,6 +164,9 @@ Frontend:
 * frontend/app/fairness/page.tsx
 * frontend/app/federated/page.tsx
 * frontend/app/explainability/page.tsx
+* frontend/app/login/page.tsx
+* frontend/app/patients/page.tsx
+* frontend/lib/auth.ts
 
 Infrastructure:
 
@@ -140,15 +192,13 @@ Most major dashboards are connected to live APIs.
 
 # Remaining Improvements
 
-## Authentication UX
+## Report ingestion pipeline (planned)
 
-Still needed:
-
-* frontend login page
-* automatic login flow
-* logout system
-* auth guards
-* session persistence
+1. ~~Patient profile/history system~~ (foundation complete)
+2. Report ingestion backend
+3. PDF extraction pipeline
+4. Auto-fill prediction workflow
+5. Historical trend analytics (partial — per-patient risk trend live)
 
 ## UI/UX
 
@@ -189,7 +239,7 @@ Stored in:
 # Startup Commands
 
 Backend:
-uvicorn app:app --reload
+uvicorn backend.api.app:app --reload
 
 Frontend:
 npm run dev

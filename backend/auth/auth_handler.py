@@ -8,7 +8,7 @@ from datetime import timedelta
 
 from jose import jwt
 
-from config import settings
+from backend.config import settings
 
 
 def create_access_token(data: dict) -> str:

@@ -1,5 +1,5 @@
-import axios, { AxiosError } from "axios";
-import { API_BASE } from "./api";
+import { apiClient, getApiErrorMessage } from "./http";
+import { getToken } from "./auth";
 
 export type FederatedStatus = {
   active_clients: number;
@@ -61,40 +61,19 @@ export type FederatedDashboardData = {
   rounds: FederatedRoundsResponse;
 };
 
-function authHeaders(): Record<string, string> {
-  const token =
-    typeof window !== "undefined" ? localStorage.getItem("token") : null;
-  if (!token) return {};
-  return { Authorization: `Bearer ${token}` };
-}
-
 export function getFederatedErrorMessage(err: unknown): string {
-  if (axios.isAxiosError(err)) {
-    const axErr = err as AxiosError<{ detail?: string | { message?: string } }>;
-    if (axErr.response?.status === 401) {
-      return "Session expired or unauthorized. Please log in again.";
-    }
-    if (axErr.response?.status === 503) {
-      return "Federated monitoring temporarily unavailable. Retry shortly.";
-    }
-    const detail = axErr.response?.data?.detail;
-    if (typeof detail === "string") return detail;
-    if (detail && typeof detail === "object" && "message" in detail) {
-      return String(detail.message);
-    }
-    return axErr.message || "Failed to load federated monitoring data.";
-  }
-  return "Failed to load federated monitoring data.";
+  return getApiErrorMessage(err, "Failed to load federated monitoring data.");
 }
 
 export async function fetchFederatedDashboardData(): Promise<FederatedDashboardData> {
-  const headers = authHeaders();
+  if (!getToken()) {
+    throw new Error("Not authenticated");
+  }
+
   const [statusRes, clientsRes, roundsRes] = await Promise.all([
-    axios.get<FederatedStatus>(`${API_BASE}/federated-status`, { headers }),
-    axios.get<FederatedClientsResponse>(`${API_BASE}/federated-clients`, {
-      headers,
-    }),
-    axios.get<FederatedRoundsResponse>(`${API_BASE}/federated-rounds`, { headers }),
+    apiClient.get<FederatedStatus>("/federated-status"),
+    apiClient.get<FederatedClientsResponse>("/federated-clients"),
+    apiClient.get<FederatedRoundsResponse>("/federated-rounds"),
   ]);
 
   return {

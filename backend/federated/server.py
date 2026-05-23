@@ -5,15 +5,7 @@ import numpy as np
 
 from collections import OrderedDict
 
-import sys
-
-sys.path.append(
-    os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "..")
-    )
-)
-
-from model import FTTransformer
+from backend.model import FTTransformer
 
 
 # Create models directory

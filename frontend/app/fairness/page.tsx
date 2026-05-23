@@ -99,7 +99,7 @@ function formatAuditTime(iso: string | undefined): string {
 
 function KpiSkeleton() {
   return (
-    <div className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm animate-pulse">
+    <div className="rounded-2xl border border-primary-soft/40 bg-surface p-5 shadow-sm animate-pulse">
       <div className="h-4 bg-slate-200 rounded w-2/3 mb-4" />
       <div className="h-9 bg-slate-200 rounded w-1/2" />
     </div>
@@ -338,15 +338,15 @@ export default function FairnessPage() {
 
   return (
     <Layout>
-      <div className="min-h-screen bg-gradient-to-br from-violet-50/50 via-slate-50 to-slate-100 -m-8 p-6 md:p-8">
+      <div className="min-h-screen app-shell-bg -m-8 p-6 md:p-8">
         {/* Header */}
         <div className="mb-8 flex flex-col gap-4 lg:flex-row lg:items-start lg:justify-between">
           <div>
             <div className="mb-2 flex flex-wrap items-center gap-2">
-              <span className="rounded-full bg-violet-100 px-3 py-1 text-xs font-semibold uppercase tracking-wide text-violet-800">
+              <span className="rounded-full bg-primary-soft px-3 py-1 text-xs font-semibold uppercase tracking-wide text-primary">
                 AI Governance & Ethics
               </span>
-              <span className="rounded-full border border-slate-300 bg-white px-3 py-1 text-xs font-medium text-slate-600">
+              <span className="rounded-full border border-primary-soft bg-surface-solid px-3 py-1 text-xs font-medium text-primary">
                 Live Bias Monitoring
               </span>
             </div>
@@ -370,14 +370,14 @@ export default function FairnessPage() {
               type="button"
               onClick={() => loadFairness(!!data)}
               disabled={loading || refreshing}
-              className="text-sm font-medium px-4 py-2 bg-violet-700 text-white rounded-lg hover:bg-violet-800 disabled:opacity-50 transition"
+              className="text-sm font-medium px-4 py-2 bg-primary text-white rounded-lg hover:bg-primary-hover disabled:opacity-50 transition"
             >
               Refresh
             </button>
 
-            <div className="w-full shrink-0 rounded-2xl border border-violet-200 bg-white p-5 shadow-sm lg:max-w-sm">
+            <div className="w-full shrink-0 rounded-2xl border border-primary-soft/60 bg-surface p-5 shadow-sm lg:max-w-sm">
               <div className="flex items-center gap-3">
-                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-violet-600 text-white">
+                <div className="flex h-11 w-11 items-center justify-center rounded-xl bg-primary text-white">
                   <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path
                       strokeLinecap="round"
@@ -439,7 +439,7 @@ export default function FairnessPage() {
               kpiCards.map((m) => (
                 <div
                   key={m.label}
-                  className={`rounded-2xl border p-5 shadow-sm ${metricStatusStyle(m.status === "pass")}`}
+                  className={`rounded-2xl border border-primary-soft/40 bg-surface p-5 shadow-sm ${metricStatusStyle(m.status === "pass")}`}
                 >
                   <div className="flex items-start justify-between">
                     <p className="text-sm font-medium text-slate-600">{m.label}</p>
@@ -482,9 +482,9 @@ export default function FairnessPage() {
               {fairnessScorecards.map((card) => (
                 <div
                   key={card.dimension}
-                  className="rounded-2xl border border-slate-200 bg-white p-5 shadow-sm"
+                  className="rounded-2xl border border-primary-soft/40 bg-surface p-5 shadow-sm"
                 >
-                  <p className="text-sm font-medium text-slate-600">{card.dimension}</p>
+                  <p className="text-sm font-medium text-text-secondary">{card.dimension}</p>
                   <div className="mt-2 flex items-end justify-between">
                     <span className="text-3xl font-bold text-slate-900">{card.score}</span>
                     <span className={`text-xl font-bold ${gradeColor(card.grade)}`}>
@@ -493,7 +493,7 @@ export default function FairnessPage() {
                   </div>
                   <div className="mt-3 h-2 overflow-hidden rounded-full bg-slate-100">
                     <div
-                      className="h-full rounded-full bg-violet-500"
+                      className="h-full rounded-full bg-primary"
                       style={{ width: `${Math.min(100, card.score)}%` }}
                     />
                   </div>
@@ -506,7 +506,7 @@ export default function FairnessPage() {
 
         {/* Charts row 1 */}
         <div className="mb-8 grid grid-cols-1 gap-6 xl:grid-cols-2">
-          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <section className="rounded-2xl border border-primary-soft/40 bg-surface p-6 shadow-sm">
             <h2 className="text-lg font-bold text-slate-900">
               Subgroup Positive Rates
             </h2>
@@ -560,7 +560,7 @@ export default function FairnessPage() {
             )}
           </section>
 
-          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <section className="rounded-2xl border border-primary-soft/40 bg-surface p-6 shadow-sm">
             <h2 className="text-lg font-bold text-slate-900">Gender Distribution</h2>
             <p className="mb-6 text-sm text-slate-500">
               Prediction volume share across gender cohorts (live logs)
@@ -599,7 +599,7 @@ export default function FairnessPage() {
         </div>
 
         {/* Risk by gender */}
-        <section className="mb-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <section className="mb-8 rounded-2xl border border-primary-soft/40 bg-surface p-6 shadow-sm">
           <h2 className="text-lg font-bold text-slate-900">Risk Distribution by Gender</h2>
           <p className="mb-6 text-sm text-slate-500">
             Predicted risk tier counts by gender cohort
@@ -635,7 +635,7 @@ export default function FairnessPage() {
         </section>
 
         {/* Fairness trend */}
-        <section className="mb-8 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <section className="mb-8 rounded-2xl border border-primary-soft/40 bg-surface p-6 shadow-sm">
           <h2 className="text-lg font-bold text-slate-900">Fairness Trend</h2>
           <p className="mb-6 text-sm text-slate-500">
             Daily demographic parity score and fairness gap (lower gap is better)
@@ -699,7 +699,7 @@ export default function FairnessPage() {
 
         {/* Bias indicators + compliance */}
         <div className="mb-8 grid grid-cols-1 gap-6 lg:grid-cols-2">
-          <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+          <section className="rounded-2xl border border-primary-soft/40 bg-surface p-6 shadow-sm">
             <div className="mb-5 flex items-center justify-between">
               <h2 className="text-lg font-bold text-slate-900">Bias Drift Indicators</h2>
               {!loading && (
@@ -727,7 +727,7 @@ export default function FairnessPage() {
                 {trends.bias_drift_indicators.map((b) => (
                   <div
                     key={b.indicator_id}
-                    className="rounded-xl border border-slate-100 bg-slate-50/80 p-4"
+                    className="rounded-xl border border-primary-soft/40 bg-surface/80 p-4"
                   >
                     <div className="flex flex-wrap items-center justify-between gap-2">
                       <div className="flex items-center gap-2">
@@ -770,9 +770,9 @@ export default function FairnessPage() {
             )}
           </section>
 
-          <section className="rounded-2xl border border-violet-200 bg-gradient-to-br from-violet-50 to-white p-6 shadow-sm">
+          <section className="rounded-2xl border border-primary-soft/40 bg-surface p-6 shadow-sm">
             <div className="mb-4 flex items-center gap-2">
-              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-violet-700 text-white">
+              <div className="flex h-9 w-9 items-center justify-center rounded-lg bg-primary text-white">
                 <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path
                     strokeLinecap="round"
@@ -788,7 +788,7 @@ export default function FairnessPage() {
               {complianceItems.map((item) => (
                 <div
                   key={item.requirement}
-                  className="flex items-center justify-between rounded-xl border border-violet-100 bg-white/80 px-4 py-3"
+                  className="flex items-center justify-between rounded-xl border border-primary-soft/40 bg-surface-solid px-4 py-3"
                 >
                   <div>
                     <p className="font-medium text-slate-900">{item.requirement}</p>
@@ -806,7 +806,7 @@ export default function FairnessPage() {
                 </div>
               ))}
             </div>
-            <div className="mt-4 rounded-lg border border-violet-200 bg-violet-50/50 p-3 text-xs text-violet-900">
+            <div className="mt-4 rounded-lg border border-primary-soft/50 bg-primary-soft/60 p-3 text-xs text-primary">
               <strong>Telemetry:</strong> fairness metrics computed from PostgreSQL
               prediction logs · Responsible AI committee sign-off required for production
               deployment.
@@ -816,7 +816,7 @@ export default function FairnessPage() {
 
         {/* Mitigations from drift */}
         {!loading && mitigations.length > 0 && (
-          <section className="mb-8 rounded-2xl border border-amber-200 bg-gradient-to-br from-amber-50/80 to-white p-6 shadow-sm">
+          <section className="mb-8 rounded-2xl border border-primary-soft/40 bg-surface p-6 shadow-sm">
             <h2 className="mb-1 text-lg font-bold text-slate-900">
               Mitigation Recommendations
             </h2>
@@ -827,7 +827,7 @@ export default function FairnessPage() {
               {mitigations.map((m) => (
                 <div
                   key={m.id}
-                  className="rounded-xl border border-amber-100 bg-white p-5 shadow-sm"
+                  className="rounded-xl border border-primary-soft/40 bg-surface p-5 shadow-sm"
                 >
                   <span
                     className={`inline-block rounded-full px-2 py-0.5 text-xs font-bold ${
@@ -857,7 +857,7 @@ export default function FairnessPage() {
         )}
 
         {/* Protected attribute table */}
-        <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+        <section className="rounded-2xl border border-primary-soft/40 bg-surface p-6 shadow-sm">
           <h2 className="mb-1 text-lg font-bold text-slate-900">
             Protected Group Analytics
           </h2>
@@ -866,8 +866,8 @@ export default function FairnessPage() {
           </p>
           {loading ? (
             <div className="py-12 text-center">
-              <div className="h-8 w-8 border-4 border-violet-600 border-t-transparent rounded-full animate-spin mx-auto mb-3" />
-              <p className="text-slate-500">Loading protected group statistics…</p>
+              <div className="h-8 w-8 border-4 border-primary-muted border-t-primary rounded-full animate-spin mx-auto mb-3" />
+              <p className="text-text-secondary">Loading protected group statistics…</p>
             </div>
           ) : protectedTableRows.length === 0 ? (
             <p className="py-10 text-center text-slate-500">
@@ -877,7 +877,7 @@ export default function FairnessPage() {
             <div className="overflow-x-auto">
               <table className="min-w-full text-left text-sm">
                 <thead>
-                  <tr className="border-b border-slate-200 bg-slate-50 text-xs uppercase tracking-wider text-slate-600">
+                  <tr className="border-b border-primary-soft/40 bg-surface-solid text-xs uppercase tracking-wider text-text-secondary">
                     <th className="py-3 pl-4 pr-2 font-bold">Attribute</th>
                     <th className="px-2 py-3 font-bold">Sample Size</th>
                     <th className="px-2 py-3 font-bold">Positive Rate</th>
@@ -932,7 +932,7 @@ function ChartSpinner({ height = 300 }: { height?: number }) {
       className="flex items-center justify-center"
       style={{ height }}
     >
-      <div className="h-10 w-10 border-4 border-violet-200 border-t-violet-600 rounded-full animate-spin" />
+      <div className="h-10 w-10 border-4 border-primary-muted border-t-primary rounded-full animate-spin" />
     </div>
   );
 }

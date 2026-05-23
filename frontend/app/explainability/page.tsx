@@ -2,6 +2,7 @@
 
 import { useEffect, useState, useMemo } from "react";
 import Layout from "../components/Layout";
+import AIValidationPanel from "../components/AIValidationPanel";
 import axios, { AxiosError } from "axios";
 import { API_BASE } from "../../lib/api";
 import {
@@ -198,6 +199,7 @@ export default function ExplainabilityPage() {
   const [error, setError] = useState<string | null>(null);
   const [data, setData] = useState<ExplainabilityData | null>(null);
   const [patient, setPatient] = useState<PatientData>(DEFAULT_PATIENT);
+  const [validation, setValidation] = useState<any | null>(null);
 
   const fetchExplainability = async (payload: PatientData) => {
     setLoading(true);
@@ -245,6 +247,35 @@ export default function ExplainabilityPage() {
 
       setData(response.data.data);
       setPatient(payload);
+      // also fetch lightweight validation from /predict for the same payload
+      try {
+        const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
+        if (token) {
+          const vresp = await axios.post(
+            `${API_URL.replace(/\/explainability$/, "")}/predict`,
+            {
+              age: Number(payload.age),
+              gender: Number(payload.gender),
+              height: Number(payload.height),
+              weight: Number(payload.weight),
+              ap_hi: Number(payload.ap_hi),
+              ap_lo: Number(payload.ap_lo),
+              cholesterol: Number(payload.cholesterol),
+              gluc: Number(payload.gluc),
+              smoke: Number(payload.smoke),
+              alco: Number(payload.alco),
+              active: Number(payload.active),
+            },
+            {
+              headers: { Authorization: `Bearer ${token}` },
+            }
+          );
+          setValidation(vresp.data ?? null);
+        }
+      } catch (err) {
+        // ignore validation fetch failures — explainability still shows
+        setValidation(null);
+      }
     } catch (err) {
       setError(getApiErrorMessage(err));
       setData(null);
@@ -405,6 +436,18 @@ export default function ExplainabilityPage() {
 
         {!loading && data && (
           <>
+            {/* AI Validation panel (uses validation fetched from /predict) */}
+            <div className="mb-6">
+              <AIValidationPanel
+                confidence_score={validation?.confidence_score ?? null}
+                confidence_label={validation?.confidence_label ?? null}
+                anomaly_detected={validation?.anomaly_detected ?? false}
+                anomaly_reason={validation?.anomaly_reason ?? null}
+                validation_notes={validation?.validation_notes ?? null}
+                trust_indicator={validation?.trust_indicator ?? null}
+                clinical_warnings={validation?.clinical_warnings ?? null}
+              />
+            </div>
             <section className="mb-8">
               <h2 className="mb-4 text-sm font-semibold uppercase tracking-wider text-slate-500">
                 Key Clinical Indicators

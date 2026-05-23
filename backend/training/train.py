@@ -1,4 +1,3 @@
-import sys
 import os
 import torch
 import torch.nn as nn
@@ -13,14 +12,8 @@ from sklearn.metrics import (
 )
 
 
-sys.path.append(
-    os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "..")
-    )
-)
-
-from cardio_dataset import CardioDataset
-from model import FTTransformer
+from backend.cardio_dataset import CardioDataset
+from backend.model import FTTransformer
 
 import os
 
@@ -157,7 +150,10 @@ for epoch in range(EPOCHS):
 
     f1 = f1_score(actuals, predictions)
 
-    roc_auc = roc_auc_score(actuals, probabilities)
+    try:
+        roc_auc = roc_auc_score(actuals, probabilities)
+    except ValueError:
+        roc_auc = float("nan")
 
 
     print(f"\nEpoch [{epoch+1}/{EPOCHS}]")
@@ -182,5 +178,9 @@ torch.save(
     model.state_dict(),
     "../models/ft_transformer.pth"
 )
+torch.save(
+    model.state_dict(),
+    "../models/global_federated_model.pth",
+)
 
-print("\nModel saved successfully!")
+print(f"\nModel saved ({input_dim} features) -> ft_transformer.pth, global_federated_model.pth")

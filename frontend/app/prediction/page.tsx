@@ -1,9 +1,27 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { FormEvent, useCallback, useEffect, useMemo, useState } from "react";
+import Link from "next/link";
+import { motion } from "framer-motion";
 import Layout from "../components/Layout";
-import axios, { AxiosError } from "axios";
-import { API_BASE } from "../../lib/api";
+import AIValidationPanel from "../components/AIValidationPanel";
+import { apiClient, getApiErrorMessage } from "../../lib/http";
+import {
+  createPatient,
+  fetchPatient,
+  getPatientErrorMessage,
+  searchPatients,
+  type PatientSummary,
+  type PatientDetail,
+} from "../../lib/patients";
+import {
+  ResultCard,
+  AnimatedProgressBar,
+  EntranceChip,
+  AnimatePresence,
+  ListItem,
+  AnimatedNumber,
+} from "../components/MotionLibrary";
 
 type FormData = {
   age: number;
@@ -19,9 +37,37 @@ type FormData = {
   active: number;
 };
 
+type ExtendedFormData = {
+  cp?: number;
+  restecg?: number;
+  thalch?: number;
+  exang?: number;
+  oldpeak?: number;
+  slope?: number;
+  ca?: number;
+  thal?: number;
+  heart_rate?: number;
+  creatinine?: number;
+};
+
 type PredictionResult = {
   risk_probability: number;
   risk_category: string;
+  confidence_score?: number;
+  confidence_label?: string;
+  anomaly_detected?: boolean;
+  anomaly_reason?: string | null;
+  validation_notes?: string[];
+  trust_indicator?: number;
+  clinical_warnings?: string[];
+  kg_consistency?: string;
+  matched_conditions?: string[];
+  reasoning_notes?: string[];
+  base_risk_probability?: number;
+  adjusted_risk_probability?: number
+  risk_adjustment?: number;
+  probable_condition?: string;
+  ai_confidence?: number;
 };
 
 const INITIAL_FORM: FormData = {
@@ -38,19 +84,28 @@ const INITIAL_FORM: FormData = {
   active: 1,
 };
 
-function getApiErrorMessage(err: unknown): string {
-  if (axios.isAxiosError(err)) {
-    const axErr = err as AxiosError<{ detail?: string }>;
-    if (axErr.response?.status === 401) {
-      return "Authentication required. Please log in and try again.";
-    }
-    if (typeof axErr.response?.data?.detail === "string") {
-      return axErr.response.data.detail;
-    }
-    return axErr.message || "Prediction request failed.";
-  }
-  return "An unexpected error occurred.";
-}
+const SYMPTOM_LIBRARY = [
+  "Chest Pain",
+  "Shortness of Breath",
+  "Fatigue",
+  "Dizziness",
+  "Headache",
+  "Blurred Vision",
+  "Palpitations",
+  "Nausea",
+  "Edema",
+  "Cough",
+  "Fever",
+  "Weakness",
+  "Rapid Heartbeat",
+  "Cold Sweats",
+  "Confusion",
+  "Frequent Urination",
+  "Weight Loss",
+  "Vision Problems",
+  "Vomiting",
+  "Muscle Pain",
+];
 
 function computeBmi(heightCm: number, weightKg: number): number | null {
   if (heightCm <= 0 || weightKg <= 0) return null;
@@ -115,10 +170,10 @@ function SectionCard({
         >
           {icon}
         </div>
-        <div>
-          <h2 className="text-lg font-bold text-slate-900">{title}</h2>
-          <p className="text-sm text-slate-500">{subtitle}</p>
-        </div>
+          <div>
+            <h2 className="text-lg font-bold text-slate-900">{title}</h2>
+            <p className="text-sm text-slate-500">{subtitle}</p>
+          </div>
       </div>
       {children}
     </section>
@@ -127,9 +182,25 @@ function SectionCard({
 
 export default function PredictionPage() {
   const [formData, setFormData] = useState<FormData>(INITIAL_FORM);
+  const [extended, setExtended] = useState<ExtendedFormData>({});
+  const [showAdvanced, setShowAdvanced] = useState(false);
   const [result, setResult] = useState<PredictionResult | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+
+  const [selectedPatient, setSelectedPatient] = useState<PatientSummary | null>(
+    null
+  );
+  const [searchQuery, setSearchQuery] = useState("");
+  const [searchResults, setSearchResults] = useState<PatientSummary[]>([]);
+  const [searching, setSearching] = useState(false);
+  const [searchError, setSearchError] = useState<string | null>(null);
+  const [showCreatePatient, setShowCreatePatient] = useState(false);
+  const [newPatientName, setNewPatientName] = useState("");
+  const [newPatientMrn, setNewPatientMrn] = useState("");
+  const [creatingPatient, setCreatingPatient] = useState(false);
+  const [selectedSymptoms, setSelectedSymptoms] = useState<string[]>([]);
+  const [symptomSearchQuery, setSymptomSearchQuery] = useState("");
 
   const bmi = useMemo(
     () => computeBmi(formData.height, formData.weight),
@@ -137,7 +208,27 @@ export default function PredictionPage() {
   );
 
   const isHighRisk = result?.risk_category === "High Risk";
-  const riskPercent = result ? Math.round(result.risk_probability * 100) : null;
+  const riskPercent = result
+  ? (result.risk_probability * 100).toFixed(1)
+  : null;
+
+  // Filter symptoms based on search query
+  const filteredSymptoms = useMemo(() => {
+    const query = symptomSearchQuery.toLowerCase().trim();
+    if (!query) return SYMPTOM_LIBRARY;
+    return SYMPTOM_LIBRARY.filter((s) => s.toLowerCase().includes(query));
+  }, [symptomSearchQuery]);
+
+  const handleAddSymptom = (symptom: string) => {
+    if (!selectedSymptoms.includes(symptom)) {
+      setSelectedSymptoms((prev) => [...prev, symptom]);
+      setSymptomSearchQuery("");
+    }
+  };
+
+  const handleRemoveSymptom = (symptom: string) => {
+    setSelectedSymptoms((prev) => prev.filter((s) => s !== symptom));
+  };
 
   const handleNumber = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
@@ -155,41 +246,129 @@ export default function PredictionPage() {
     }));
   };
 
+  const handleExtendedNumber = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const { name, value } = e.target;
+    setExtended((prev) => ({
+      ...prev,
+      [name]: value === "" ? undefined : Number(value),
+    }));
+  };
+
+  const refreshSelectedPatient = useCallback(async (patientId: number) => {
+    try {
+      const detail = await fetchPatient(patientId);
+      setSelectedPatient(detail);
+    } catch {
+      /* keep current selection on refresh failure */
+    }
+  }, []);
+
+  useEffect(() => {
+    const q = searchQuery.trim();
+    if (q.length < 2) {
+      setSearchResults([]);
+      setSearchError(null);
+      return;
+    }
+
+    const timer = setTimeout(async () => {
+      setSearching(true);
+      setSearchError(null);
+      try {
+        const data = await searchPatients(q);
+        setSearchResults(data.results);
+      } catch (err: unknown) {
+        setSearchResults([]);
+        setSearchError(getPatientErrorMessage(err));
+      } finally {
+        setSearching(false);
+      }
+    }, 300);
+
+    return () => clearTimeout(timer);
+  }, [searchQuery]);
+
+  const handleSelectPatient = (patient: PatientSummary) => {
+    setSelectedPatient(patient);
+    setSearchQuery(patient.display_name);
+    setSearchResults([]);
+    setShowCreatePatient(false);
+    setError(null);
+  };
+
+  const handleClearPatient = () => {
+    setSelectedPatient(null);
+    setSearchQuery("");
+    setSearchResults([]);
+    setShowCreatePatient(false);
+  };
+
+  const handleCreatePatient = async (e: FormEvent) => {
+    e.preventDefault();
+    const name = newPatientName.trim();
+    if (!name) {
+      setSearchError("Enter a patient name to create a profile.");
+      return;
+    }
+    setCreatingPatient(true);
+    setSearchError(null);
+    try {
+      const created = await createPatient({
+        display_name: name,
+        medical_record_number: newPatientMrn.trim() || undefined,
+      });
+      setSelectedPatient(created);
+      setSearchQuery(created.display_name);
+      setNewPatientName("");
+      setNewPatientMrn("");
+      setShowCreatePatient(false);
+      setSearchResults([]);
+    } catch (err: unknown) {
+      setSearchError(getPatientErrorMessage(err));
+    } finally {
+      setCreatingPatient(false);
+    }
+  };
+
   const predictRisk = async () => {
+    if (!selectedPatient) {
+      setError("Select or create a patient before running a prediction.");
+      return;
+    }
+
     setLoading(true);
     setError(null);
 
     try {
-      const token = localStorage.getItem("token");
-      if (!token) {
-        setError("No authentication token found. Please log in first.");
-        setLoading(false);
-        return;
+      const payload: Record<string, any> = {
+        patient_id: selectedPatient.id,
+        age: Number(formData.age),
+        gender: Number(formData.gender),
+        height: Number(formData.height),
+        weight: Number(formData.weight),
+        ap_hi: Number(formData.ap_hi),
+        ap_lo: Number(formData.ap_lo),
+        cholesterol: Number(formData.cholesterol),
+        gluc: Number(formData.gluc),
+        smoke: Number(formData.smoke),
+        alco: Number(formData.alco),
+        active: Number(formData.active),
+      };
+      if (showAdvanced) {
+        for (const [key, val] of Object.entries(extended)) {
+          if (val !== undefined && !Number.isNaN(val)) {
+            payload[key] = val;
+          }
+        }
+      }
+      // Include selected symptoms
+      if (selectedSymptoms.length > 0) {
+        payload.symptoms = selectedSymptoms;
       }
 
-      const response = await axios.post<PredictionResult>(
-        `${API_BASE}/predict`,
-        {
-          age: Number(formData.age),
-          gender: Number(formData.gender),
-          height: Number(formData.height),
-          weight: Number(formData.weight),
-          ap_hi: Number(formData.ap_hi),
-          ap_lo: Number(formData.ap_lo),
-          cholesterol: Number(formData.cholesterol),
-          gluc: Number(formData.gluc),
-          smoke: Number(formData.smoke),
-          alco: Number(formData.alco),
-          active: Number(formData.active),
-        },
-        {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        }
-      );
-
+      const response = await apiClient.post<PredictionResult>("/predict", payload);
       setResult(response.data);
+      await refreshSelectedPatient(selectedPatient.id);
     } catch (err) {
       setError(getApiErrorMessage(err));
       setResult(null);
@@ -211,14 +390,207 @@ export default function PredictionPage() {
             Patient Risk Prediction
           </h1>
           <p className="mt-2 max-w-2xl text-slate-600">
-            Enter patient vitals and lifestyle indicators for federated cardiovascular
-            risk scoring. All fields map to the backend PatientData schema.
+            Search or create a patient profile, then run cardiovascular risk scoring.
+            Predictions link automatically to the active patient timeline.
           </p>
         </div>
 
         <div className="grid grid-cols-1 gap-8 xl:grid-cols-3">
           {/* Form column */}
-          <div className="space-y-6 xl:col-span-2">
+          <div className="xl:col-span-2">
+            <SectionCard
+              title="Patient Selection"
+              subtitle="Search by name or UUID, or register a new patient"
+              accent="sky"
+              icon={
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M17 20h5v-2a3 3 0 00-5.356-1.857M17 20H7m10 0v-2c0-.656-.126-1.283-.356-1.857M7 20H2v-2a3 3 0 015.356-1.857M7 20v-2c0-.656.126-1.283.356-1.857m0 0a5.002 5.002 0 019.288 0M15 7a3 3 0 11-6 0 3 3 0 016 0z"
+                  />
+                </svg>
+              }
+            >
+              <div className="space-y-4">
+                <div className="relative">
+                  <label htmlFor="patient-search" className={labelClass}>
+                    Search patient
+                  </label>
+                  <input
+                    id="patient-search"
+                    type="search"
+                    value={searchQuery}
+                    onChange={(e) => {
+                      setSearchQuery(e.target.value);
+                      if (selectedPatient && e.target.value !== selectedPatient.display_name) {
+                        setSelectedPatient(null);
+                      }
+                    }}
+                    placeholder="Name or patient UUID…"
+                    className={inputClass}
+                    autoComplete="off"
+                  />
+                  {searching && (
+                    <p className={`${hintClass} text-teal-600`}>Searching…</p>
+                  )}
+                  {searchError && (
+                    <p className={`${hintClass} text-red-600`}>{searchError}</p>
+                  )}
+                  {!searching &&
+                    searchQuery.trim().length >= 2 &&
+                    searchResults.length > 0 && (
+                      <ul
+                        className="absolute z-20 mt-1 max-h-56 w-full overflow-auto rounded-xl border border-slate-200 bg-white py-1 shadow-lg"
+                        role="listbox"
+                      >
+                        {searchResults.map((p) => (
+                          <li key={p.id}>
+                            <button
+                              type="button"
+                              role="option"
+                              onClick={() => handleSelectPatient(p)}
+                              className="w-full px-4 py-3 text-left hover:bg-teal-50 transition"
+                            >
+                              <span className="font-medium text-slate-900">
+                                {p.display_name}
+                              </span>
+                              <span className="block text-xs font-mono text-slate-500 mt-0.5">
+                                {p.patient_uid}
+                              </span>
+                              {p.medical_record_number && (
+                                <span className="block text-xs text-slate-400">
+                                  MRN: {p.medical_record_number}
+                                </span>
+                              )}
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                  {!searching &&
+                    searchQuery.trim().length >= 2 &&
+                    searchResults.length === 0 &&
+                    !searchError && (
+                      <p className={hintClass}>
+                        No patients found. Create a new profile below.
+                      </p>
+                    )}
+                </div>
+
+                <div className="flex flex-wrap gap-3">
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setShowCreatePatient(!showCreatePatient);
+                      if (!showCreatePatient && searchQuery.trim()) {
+                        setNewPatientName(searchQuery.trim());
+                      }
+                    }}
+                    className="rounded-lg border border-teal-200 bg-teal-50 px-4 py-2 text-sm font-semibold text-teal-800 hover:bg-teal-100 transition"
+                  >
+                    {showCreatePatient ? "Cancel" : "+ Create New Patient"}
+                  </button>
+                  {selectedPatient && (
+                    <button
+                      type="button"
+                      onClick={handleClearPatient}
+                      className="rounded-lg border border-slate-200 px-4 py-2 text-sm font-medium text-slate-600 hover:bg-slate-50 transition"
+                    >
+                      Clear selection
+                    </button>
+                  )}
+                </div>
+
+                {showCreatePatient && (
+                  <form
+                    onSubmit={handleCreatePatient}
+                    className="rounded-xl border border-teal-100 bg-teal-50/40 p-4 space-y-3"
+                  >
+                    <p className="text-sm font-medium text-slate-800">
+                      New patient profile
+                    </p>
+                    <div>
+                      <label htmlFor="new-patient-name" className={labelClass}>
+                        Display name
+                      </label>
+                      <input
+                        id="new-patient-name"
+                        value={newPatientName}
+                        onChange={(e) => setNewPatientName(e.target.value)}
+                        className={inputClass}
+                        required
+                      />
+                    </div>
+                    <div>
+                      <label htmlFor="new-patient-mrn" className={labelClass}>
+                        MRN <span className="text-slate-400">(optional)</span>
+                      </label>
+                      <input
+                        id="new-patient-mrn"
+                        value={newPatientMrn}
+                        onChange={(e) => setNewPatientMrn(e.target.value)}
+                        className={inputClass}
+                      />
+                    </div>
+                    <button
+                      type="submit"
+                      disabled={creatingPatient}
+                      className="rounded-lg bg-teal-600 px-4 py-2 text-sm font-semibold text-white hover:bg-teal-700 disabled:opacity-60"
+                    >
+                      {creatingPatient ? "Creating…" : "Create & select patient"}
+                    </button>
+                  </form>
+                )}
+
+                {selectedPatient ? (
+                  <div className="rounded-xl border border-emerald-200 bg-emerald-50/60 p-4">
+                    <p className="text-xs font-semibold uppercase tracking-wider text-emerald-800">
+                      Active patient
+                    </p>
+                    <p className="mt-1 text-lg font-bold text-slate-900">
+                      {selectedPatient.display_name}
+                    </p>
+                    <p className="text-xs font-mono text-slate-600 mt-1 break-all">
+                      {selectedPatient.patient_uid}
+                    </p>
+                    <div className="mt-3 grid grid-cols-2 gap-3 text-sm">
+                      <div>
+                        <span className="text-slate-500">Predictions</span>
+                        <p className="font-semibold text-slate-900">
+                          {selectedPatient.prediction_count}
+                        </p>
+                      </div>
+                      <div>
+                        <span className="text-slate-500">Latest risk</span>
+                        <p className="font-semibold text-slate-900">
+                          {selectedPatient.latest_risk_probability != null
+                            ? `${(selectedPatient.latest_risk_probability * 100).toFixed(1)}%`
+                            : "—"}
+                          {selectedPatient.latest_risk_category && (
+                            <span className="block text-xs font-normal text-slate-600">
+                              {selectedPatient.latest_risk_category}
+                            </span>
+                          )}
+                        </p>
+                      </div>
+                    </div>
+                    <Link
+                      href={`/patients/${selectedPatient.id}`}
+                      className="mt-3 inline-block text-sm font-medium text-teal-700 hover:text-teal-900"
+                    >
+                      View full timeline →
+                    </Link>
+                  </div>
+                ) : (
+                  <p className="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-lg px-4 py-3">
+                    Select or create a patient to enable prediction and timeline linking.
+                  </p>
+                )}
+              </div>
+            </SectionCard>
+
             {error && (
               <div className="rounded-xl border border-red-200 bg-red-50 px-5 py-4 text-red-800">
                 <p className="font-semibold">Prediction failed</p>
@@ -459,10 +831,162 @@ export default function PredictionPage() {
               </div>
             </SectionCard>
 
+            <SectionCard
+              title="Clinical Symptoms"
+              subtitle="Patient-reported symptoms for prediction context"
+              accent="sky"
+              icon={
+                <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+              }
+            >
+              <div className="space-y-4">
+                {/* Symptom search input */}
+                <div>
+                  <label htmlFor="symptom-search" className={labelClass}>
+                    Search and add symptoms
+                  </label>
+                  <div className="relative">
+                    <input
+                      id="symptom-search"
+                      type="search"
+                      value={symptomSearchQuery}
+                      onChange={(e) => setSymptomSearchQuery(e.target.value)}
+                      placeholder="Type to search (e.g., chest, breath, fever)…"
+                      className={inputClass}
+                      autoComplete="off"
+                    />
+                    {/* Symptom suggestions dropdown */}
+                    {symptomSearchQuery.trim().length > 0 && filteredSymptoms.length > 0 && (
+                      <ul
+                        className="absolute z-20 mt-2 max-h-56 w-full overflow-auto rounded-xl border border-sky-200 bg-white py-2 shadow-lg"
+                        role="listbox"
+                      >
+                        {filteredSymptoms.map((symptom) => (
+                          <li key={symptom}>
+                            <button
+                              type="button"
+                              onClick={() => handleAddSymptom(symptom)}
+                              disabled={selectedSymptoms.includes(symptom)}
+                              className={`w-full px-4 py-2.5 text-left text-sm transition ${ selectedSymptoms.includes(symptom)
+                                ? "bg-sky-50 text-sky-500 opacity-50 cursor-not-allowed"
+                                : "hover:bg-sky-50 text-slate-700"
+                              }`}
+                            >
+                              <span className="flex items-center gap-2">
+                                {selectedSymptoms.includes(symptom) && (
+                                  <svg className="h-4 w-4 text-sky-600" fill="currentColor" viewBox="0 0 20 20">
+                                    <path fillRule="evenodd" d="M16.707 5.293a1 1 0 010 1.414l-8 8a1 1 0 01-1.414 0l-4-4a1 1 0 011.414-1.414L8 12.586l7.293-7.293a1 1 0 011.414 0z" clipRule="evenodd" />
+                                  </svg>
+                                )}
+                                {symptom}
+                              </span>
+                            </button>
+                          </li>
+                        ))}
+                      </ul>
+                    )}
+                    {symptomSearchQuery.trim().length > 0 && filteredSymptoms.length === 0 && (
+                      <p className={`${hintClass} text-sky-600 mt-2`}>No matching symptoms found.</p>
+                    )}
+                  </div>
+                  <p className={hintClass}>Optional — select any relevant patient symptoms</p>
+                </div>
+
+                {/* Selected symptoms chips */}
+                {selectedSymptoms.length > 0 && (
+                  <motion.div
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: 0.2 }}
+                  >
+                    <p className="mb-2.5 text-sm font-medium text-slate-700">Selected symptoms ({selectedSymptoms.length})</p>
+                    <div className="flex flex-wrap gap-2">
+                      <AnimatePresence mode="popLayout">
+                        {selectedSymptoms.map((symptom) => (
+                          <EntranceChip
+                            key={symptom}
+                            className="flex items-center gap-2 rounded-full bg-gradient-to-r from-sky-100 to-cyan-100 border border-sky-200 px-4 py-1.5 text-sm font-medium text-sky-800 shadow-sm hover:shadow-md transition"
+                          >
+                            <span>{symptom}</span>
+                            <button
+                              type="button"
+                              onClick={() => handleRemoveSymptom(symptom)}
+                              className="ml-1 rounded-full hover:bg-sky-200 p-0.5 transition"
+                              aria-label={`Remove ${symptom}`}
+                            >
+                              <svg className="h-4 w-4" fill="currentColor" viewBox="0 0 20 20">
+                                <path fillRule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clipRule="evenodd" />
+                              </svg>
+                            </button>
+                          </EntranceChip>
+                        ))}
+                      </AnimatePresence>
+                    </div>
+                  </motion.div>
+                )}
+
+                {/* No symptoms message */}
+                {selectedSymptoms.length === 0 && (
+                  <p className="text-sm text-slate-500 italic">No symptoms selected — predictions will use vital signs and lab values only.</p>
+                )}
+              </div>
+            </SectionCard>
+
+            <section className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <button
+                type="button"
+                onClick={() => setShowAdvanced((v) => !v)}
+                className="flex w-full items-center justify-between text-left"
+              >
+                <div>
+                  <h2 className="text-lg font-bold text-slate-900">
+                    Extended features (UCI / ICU)
+                  </h2>
+                  <p className="text-sm text-slate-500">
+                    Optional fields from multi-dataset training; omitted values use cohort medians.
+                  </p>
+                </div>
+                <span className="text-sm font-medium text-teal-700">
+                  {showAdvanced ? "Hide" : "Show"}
+                </span>
+              </button>
+              {showAdvanced && (
+                <div className="mt-5 grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  {(
+                    [
+                      ["thalch", "Max heart rate"],
+                      ["heart_rate", "Heart rate (ICU)"],
+                      ["creatinine", "Creatinine"],
+                      ["oldpeak", "ST depression"],
+                      ["cp", "Chest pain (encoded)"],
+                      ["exang", "Exercise angina (0/1)"],
+                    ] as const
+                  ).map(([name, label]) => (
+                    <div key={name}>
+                      <label htmlFor={name} className={labelClass}>
+                        {label}
+                      </label>
+                      <input
+                        id={name}
+                        name={name}
+                        type="number"
+                        step="any"
+                        value={extended[name] ?? ""}
+                        onChange={handleExtendedNumber}
+                        className={inputClass}
+                      />
+                    </div>
+                  ))}
+                </div>
+              )}
+            </section>
+
             <button
               type="button"
               onClick={predictRisk}
-              disabled={loading}
+              disabled={loading || !selectedPatient}
               className="group relative w-full overflow-hidden rounded-xl bg-gradient-to-r from-teal-600 via-teal-500 to-cyan-600 px-8 py-4 text-center font-semibold text-white shadow-lg shadow-teal-500/25 transition hover:shadow-teal-500/40 disabled:cursor-not-allowed disabled:opacity-70"
             >
               <span className="relative z-10 flex items-center justify-center gap-2">
@@ -485,10 +1009,19 @@ export default function PredictionPage() {
           </div>
 
           {/* Summary sidebar */}
-          <div className="space-y-6">
-            <aside className="sticky top-6 rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
-              <h2 className="text-lg font-bold text-slate-900">Patient Summary</h2>
-              <p className="mt-1 text-sm text-slate-500">Live preview of entered data</p>
+         <div className="space-y-6">
+            <aside className="rounded-2xl border border-slate-200 bg-white p-6 shadow-sm">
+              <h2 className="text-lg font-bold text-slate-900">Clinical Summary</h2>
+              <p className="mt-1 text-sm text-slate-500">
+                {selectedPatient
+                  ? `Profile: ${selectedPatient.display_name}`
+                  : "Select a patient to link predictions"}
+              </p>
+              {selectedPatient && (
+                <p className="mt-2 text-xs font-mono text-slate-500 break-all">
+                  {selectedPatient.patient_uid}
+                </p>
+              )}
 
               <div className="mt-6 rounded-xl border border-slate-100 bg-slate-50/80 p-4">
                 <p className="text-xs font-semibold uppercase tracking-wider text-slate-500">
@@ -564,7 +1097,9 @@ export default function PredictionPage() {
             </aside>
 
             {result && (
-              <div
+              <ResultCard
+                isHighRisk={isHighRisk}
+                duration={0.6}
                 className={`rounded-2xl border p-6 shadow-sm ${
                   isHighRisk
                     ? "border-red-200 bg-gradient-to-br from-red-50 to-white"
@@ -582,7 +1117,7 @@ export default function PredictionPage() {
                     </svg>
                   </div>
                   <div>
-                    <h3 className="font-bold text-slate-900">Analytics Result</h3>
+                    <h3 className="font-bold text-slate-900">AI Clinical Assessment</h3>
                     <p className="text-xs text-slate-500">Federated FT-Transformer inference</p>
                   </div>
                 </div>
@@ -605,6 +1140,71 @@ export default function PredictionPage() {
                     </span>
                   </div>
                 </div>
+                <div className="mt-5 rounded-xl bg-white/80 p-4">
+                  <p className="text-xs uppercase tracking-wide text-slate-500">
+                    Most Probable Condition
+                  </p>
+
+                  <h2 className="mt-1 text-2xl font-bold text-cyan-700">
+                    {result.probable_condition || "General Health Risk"}
+                  </h2>
+                </div>
+                <div className="mt-4 rounded-xl bg-white/80 p-4">
+                  <div className="mb-2 flex items-center justify-between">
+                    <p className="text-xs uppercase tracking-wide text-slate-500">
+                      AI Confidence
+                    </p>
+
+                    <span className="text-sm font-bold text-cyan-700">
+                      <AnimatedNumber
+                        value={result.ai_confidence || 0}
+                        duration={0.8}
+                        suffix="%"
+                      />
+                    </span>
+                  </div>
+
+                  <AnimatedProgressBar
+                    value={result.ai_confidence || 0}
+                    duration={1.5}
+                    color="cyan"
+                    showGlow={true}
+                  />
+                </div>
+<div className="mt-4 flex items-center justify-between rounded-xl bg-white/80 px-4 py-3">
+  <span className="text-sm text-slate-600">
+    Knowledge Graph Consistency
+  </span>
+
+  <span
+    className={`rounded-full px-3 py-1 text-xs font-bold ${
+      result.kg_consistency === "HIGH"
+        ? "bg-emerald-100 text-emerald-700"
+        : "bg-amber-100 text-amber-700"
+    }`}
+  >
+    {result.kg_consistency}
+  </span>
+</div>
+<div className="mt-4 rounded-xl bg-white/80 p-4">
+  <p className="text-xs uppercase tracking-wide text-slate-500">
+    Supporting Clinical Conditions
+  </p>
+
+  <div className="mt-3 flex flex-wrap gap-2">
+    <AnimatePresence mode="popLayout">
+      {result.matched_conditions?.map((condition, idx) => (
+        <EntranceChip
+          key={condition}
+          delay={idx * 0.08}
+          className="rounded-full bg-cyan-100 px-3 py-1 text-xs font-semibold text-cyan-700"
+        >
+          {condition}
+        </EntranceChip>
+      ))}
+    </AnimatePresence>
+  </div>
+</div>
 
                 <div className="mt-4 h-2 overflow-hidden rounded-full bg-white">
                   <div
@@ -617,10 +1217,75 @@ export default function PredictionPage() {
                 <p className="mt-3 text-xs text-slate-500">
                   For clinical decision support only. Review with standard-of-care protocols.
                 </p>
-              </div>
+                <div className="mt-5">
+                  <div className="mt-5 rounded-xl border border-slate-200 bg-white/80 p-4">
+  <p className="text-xs uppercase tracking-wide text-slate-500">
+    AI Clinical Reasoning
+  </p>
+
+  <div className="mt-3 space-y-2">
+    {result.reasoning_notes?.map((note, idx) => (
+      <ListItem
+        key={idx}
+        delay={idx * 0.1}
+        variant="slideInLeft"
+        className="rounded-lg bg-slate-50 p-3 text-sm text-slate-700"
+      >
+        {note}
+      </ListItem>
+    ))}
+  </div>
+</div>
+                  <AIValidationPanel
+                    confidence_score={result.confidence_score}
+                    confidence_label={result.confidence_label}
+                    anomaly_detected={result.anomaly_detected}
+                    anomaly_reason={result.anomaly_reason}
+                    validation_notes={result.validation_notes}
+                    trust_indicator={result.trust_indicator}
+                    clinical_warnings={result.clinical_warnings}
+                  />
+                </div>
+              </ResultCard>
             )}
           </div>
-        </div>
+        </div>        {/* Floating Action Button for Explainability */}
+        {result && (
+          <motion.div
+            className="fixed bottom-8 right-8 z-30"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.5, type: "spring", stiffness: 120 }}
+            whileHover={{ scale: 1.1 }}
+            whileTap={{ scale: 0.95 }}
+          >
+            <motion.div
+              animate={{ y: [0, -10, 0] }}
+              transition={{ repeat: Infinity, duration: 2, ease: "easeInOut" }}
+            >
+              <Link
+                href="/explainability"
+                className="flex items-center gap-2 rounded-full bg-slate-900 px-6 py-3 text-sm font-bold text-white shadow-2xl transition hover:bg-slate-800"
+              >
+                <svg
+                  className="h-5 w-5 text-teal-400"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z"
+                  />
+                </svg>
+                View AI Explanation
+              </Link>
+            </motion.div>
+          </motion.div>
+        )}
+
       </div>
     </Layout>
   );

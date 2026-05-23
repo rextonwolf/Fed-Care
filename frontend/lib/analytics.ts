@@ -1,5 +1,5 @@
-import axios, { AxiosError } from "axios";
-import { API_BASE } from "./api";
+import { apiClient, getApiErrorMessage } from "./http";
+import { getToken } from "./auth";
 
 export type SystemMetrics = {
   total_predictions: number;
@@ -54,41 +54,28 @@ export type DashboardData = {
   activity: RecentActivity;
 };
 
-function authHeaders(): Record<string, string> {
-  const token =
-    typeof window !== "undefined" ? localStorage.getItem("token") : null;
-  if (!token) return {};
-  return { Authorization: `Bearer ${token}` };
+export function getAnalyticsErrorMessage(err: unknown): string {
+  return getApiErrorMessage(
+    err,
+    "Failed to load analytics. Check that the API is running and you are logged in."
+  );
 }
 
-export function getAnalyticsErrorMessage(err: unknown): string {
-  if (axios.isAxiosError(err)) {
-    const axErr = err as AxiosError<{ detail?: string | { message?: string } }>;
-    if (axErr.response?.status === 401) {
-      return "Session expired or unauthorized. Please log in again.";
-    }
-    if (axErr.response?.status === 503) {
-      return "Analytics service temporarily unavailable. Retry shortly.";
-    }
-    const detail = axErr.response?.data?.detail;
-    if (typeof detail === "string") return detail;
-    if (detail && typeof detail === "object" && "message" in detail) {
-      return String(detail.message);
-    }
-    return axErr.message || "Failed to load analytics.";
-  }
-  return "Failed to load analytics.";
+export function hasAuthToken(): boolean {
+  return Boolean(getToken());
 }
 
 export async function fetchDashboardData(): Promise<DashboardData> {
-  const headers = authHeaders();
+  if (!getToken()) {
+    const err = new Error("Not authenticated") as Error & { status?: number };
+    err.status = 401;
+    throw err;
+  }
+
   const [metricsRes, analyticsRes, activityRes] = await Promise.all([
-    axios.get<SystemMetrics>(`${API_BASE}/system-metrics`, { headers }),
-    axios.get<PredictionAnalytics>(`${API_BASE}/prediction-analytics`, {
-      headers,
-    }),
-    axios.get<RecentActivity>(`${API_BASE}/recent-activity`, {
-      headers,
+    apiClient.get<SystemMetrics>("/system-metrics"),
+    apiClient.get<PredictionAnalytics>("/prediction-analytics"),
+    apiClient.get<RecentActivity>("/recent-activity", {
       params: { limit: 20 },
     }),
   ]);

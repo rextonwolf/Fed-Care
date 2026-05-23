@@ -254,7 +254,7 @@ cd federated-healthcare-ai
 ### 2. Backend setup
 
 ```bash
-cd backend
+# From repository root
 python -m venv .venv
 
 # Windows
@@ -262,11 +262,10 @@ python -m venv .venv
 # macOS / Linux
 source .venv/bin/activate
 
-pip install -r requirements.txt
+pip install -r backend/requirements.txt
 pip install torch --index-url https://download.pytorch.org/whl/cpu
 
-cd api
-uvicorn app:app --reload --host 0.0.0.0 --port 8000
+uvicorn backend.api.app:app --reload --host 0.0.0.0 --port 8000
 ```
 
 API root: [http://localhost:8000](http://localhost:8000)  

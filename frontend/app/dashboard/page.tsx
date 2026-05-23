@@ -15,22 +15,34 @@ import {
   CartesianGrid,
   Legend,
 } from "recharts";
+import { useRouter } from "next/navigation";
 import {
   fetchDashboardData,
   getAnalyticsErrorMessage,
+  hasAuthToken,
   type DashboardData,
   type RecentActivityItem,
 } from "../../lib/analytics";
+import { isAuthenticated } from "../../lib/auth";
+import {
+  StaggerContainer,
+  AnimatedCard,
+  ViewportFadeIn,
+  ListItem,
+  AnimatedNumber,
+} from "../components/MotionLibrary";
 
 const REFRESH_INTERVAL_MS = 30_000;
 
-const COLORS = ["#22c55e", "#facc15", "#ef4444"];
+const CHART_COLORS = ["#10b981", "#38bdf8", "#f43f5e"];
+const CHART_SKY = "#0ea5e9";
+const CHART_GRID = "rgba(148, 163, 184, 0.25)";
 
-const STATUS_STYLES: Record<string, string> = {
-  operational: "bg-emerald-100 text-emerald-800 border-emerald-200",
-  idle: "bg-amber-100 text-amber-800 border-amber-200",
-  initializing: "bg-slate-100 text-slate-700 border-slate-200",
-};
+function statusPillClass(status: string): string {
+  if (status === "operational") return "status-pill-glass status-pill-glass--operational";
+  if (status === "idle") return "status-pill-glass status-pill-glass--idle";
+  return "status-pill-glass";
+}
 
 function formatNumber(value: number, decimals = 0): string {
   if (decimals > 0) return value.toFixed(decimals);
@@ -39,13 +51,9 @@ function formatNumber(value: number, decimals = 0): string {
 
 function riskBadgeClass(category: string | null | undefined): string {
   const c = (category ?? "").toLowerCase();
-  if (c.includes("high")) {
-    return "bg-red-100 text-red-700";
-  }
-  if (c.includes("medium")) {
-    return "bg-yellow-100 text-yellow-700";
-  }
-  return "bg-green-100 text-green-700";
+  if (c.includes("high")) return "risk-pill risk-pill--high";
+  if (c.includes("medium")) return "risk-pill risk-pill--medium";
+  return "risk-pill risk-pill--low";
 }
 
 function ActivityRow({ item }: { item: RecentActivityItem }) {
@@ -53,12 +61,12 @@ function ActivityRow({ item }: { item: RecentActivityItem }) {
   const label = item.risk_category ?? "Unknown";
 
   return (
-    <div className="flex items-center justify-between py-3 border-b border-gray-100 last:border-0">
+    <div className="flex items-center justify-between py-3 border-b border-sky-100/80 last:border-0">
       <div className="min-w-0">
-        <p className="text-sm font-semibold text-black">
+        <p className="text-sm font-semibold text-sky-950">
           Prediction #{item.id}
         </p>
-        <p className="text-xs text-gray-500 mt-0.5">
+        <p className="text-xs text-sky-800/60 mt-0.5">
           {item.timestamp
             ? new Date(item.timestamp).toLocaleString()
             : "—"}
@@ -66,14 +74,10 @@ function ActivityRow({ item }: { item: RecentActivityItem }) {
         </p>
       </div>
       <div className="flex items-center gap-3 shrink-0">
-        <span className="text-sm font-medium text-gray-700">{riskPct}%</span>
-        <span
-          className={`text-xs font-semibold px-2.5 py-1 rounded-full ${riskBadgeClass(
-            item.risk_category
-          )}`}
-        >
-          {label}
+        <span className="text-sm font-medium text-sky-900 ds-font-mono">
+          {riskPct}%
         </span>
+        <span className={riskBadgeClass(item.risk_category)}>{label}</span>
       </div>
     </div>
   );
@@ -81,14 +85,15 @@ function ActivityRow({ item }: { item: RecentActivityItem }) {
 
 function KpiSkeleton() {
   return (
-    <div className="bg-white p-6 rounded-2xl shadow-md animate-pulse">
-      <div className="h-4 bg-gray-200 rounded w-2/3 mb-4" />
-      <div className="h-10 bg-gray-200 rounded w-1/2" />
+    <div className="liquid-glass-kpi animate-pulse">
+      <div className="h-4 bg-sky-200/60 rounded-lg w-2/3 mb-4" />
+      <div className="h-10 bg-sky-200/60 rounded-lg w-1/2" />
     </div>
   );
 }
 
 export default function DashboardPage() {
+  const router = useRouter();
   const [data, setData] = useState<DashboardData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -96,13 +101,11 @@ export default function DashboardPage() {
   const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   const loadDashboard = useCallback(async (isRefresh = false) => {
-    const token =
-      typeof window !== "undefined" ? localStorage.getItem("token") : null;
-
-    if (!token) {
+    if (!isAuthenticated() || !hasAuthToken()) {
       setError("No authentication token found. Please log in first.");
       setLoading(false);
       setRefreshing(false);
+      router.replace("/login?returnUrl=%2Fdashboard");
       return;
     }
 
@@ -118,7 +121,14 @@ export default function DashboardPage() {
       setData(result);
       setLastUpdated(new Date());
     } catch (err: unknown) {
-      setError(getAnalyticsErrorMessage(err));
+      const message = getAnalyticsErrorMessage(err);
+      setError(message);
+      if (
+        message.includes("unauthorized") ||
+        message.includes("Session expired")
+      ) {
+        router.replace("/login?returnUrl=%2Fdashboard");
+      }
       if (!isRefresh) {
         setData(null);
       }
@@ -126,15 +136,11 @@ export default function DashboardPage() {
       setLoading(false);
       setRefreshing(false);
     }
-  }, []);
+  }, [router]);
 
   useEffect(() => {
     loadDashboard(false);
-
-    const intervalId = setInterval(() => {
-      loadDashboard(true);
-    }, REFRESH_INTERVAL_MS);
-
+    const intervalId = setInterval(() => loadDashboard(true), REFRESH_INTERVAL_MS);
     return () => clearInterval(intervalId);
   }, [loadDashboard]);
 
@@ -157,38 +163,34 @@ export default function DashboardPage() {
     })) ?? [];
 
   const systemStatus = metrics?.system_status ?? "initializing";
-  const statusClass =
-    STATUS_STYLES[systemStatus] ?? STATUS_STYLES.initializing;
 
   return (
     <Layout>
-      <div className="min-h-screen">
-        {/* Header */}
+      <div className="page-enter max-w-[1600px] mx-auto">
         <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
           <div>
-            <h1 className="text-4xl font-bold text-black">
+            <span className="status-pill status-pill--primary mb-3">
+              Live analytics
+            </span>
+            <h1 className="ds-heading-page text-sky-950">
               Healthcare AI Dashboard
             </h1>
-            <p className="text-gray-500 mt-2">
-              Live federated prediction analytics · auto-refresh every 30s
+            <p className="ds-text-support mt-2">
+              Federated prediction telemetry · auto-refresh every 30s
             </p>
           </div>
 
           <div className="flex flex-wrap items-center gap-3">
             {metrics && (
-              <span
-                className={`text-xs font-semibold px-3 py-1.5 rounded-full border capitalize ${statusClass}`}
-              >
+              <span className={statusPillClass(systemStatus)}>
                 {metrics.system_status}
               </span>
             )}
             {metrics?.model_version && (
-              <span className="text-xs text-gray-600 bg-white px-3 py-1.5 rounded-full border border-gray-200 shadow-sm">
-                {metrics.model_version}
-              </span>
+              <span className="status-pill-glass">{metrics.model_version}</span>
             )}
             {lastUpdated && (
-              <span className="text-xs text-gray-500">
+              <span className="ds-text-caption">
                 Updated {lastUpdated.toLocaleTimeString()}
                 {refreshing ? " · syncing…" : ""}
               </span>
@@ -197,29 +199,31 @@ export default function DashboardPage() {
               type="button"
               onClick={() => loadDashboard(true)}
               disabled={loading || refreshing}
-              className="text-sm font-medium px-4 py-2 bg-black text-white rounded-lg hover:bg-gray-800 disabled:opacity-50 transition"
+              className="btn-liquid-primary"
             >
               Refresh
             </button>
           </div>
         </div>
 
-        {/* Error banner */}
         {error && (
-          <div className="mb-6 p-4 rounded-xl bg-red-50 border border-red-200 text-red-700 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <div className="liquid-glass-error mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <span className="font-medium">{error}</span>
             <button
               type="button"
               onClick={() => loadDashboard(!!data)}
-              className="text-sm font-semibold underline hover:no-underline shrink-0"
+              className="text-sm font-semibold text-sky-700 hover:text-sky-900 shrink-0"
             >
               Retry
             </button>
           </div>
         )}
 
-        {/* KPI Cards */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6 mb-10">
+        <StaggerContainer
+          className="ds-grid-metrics mb-10"
+          delay={0.2}
+          staggerValue={0.08}
+        >
           {loading ? (
             <>
               <KpiSkeleton />
@@ -229,150 +233,163 @@ export default function DashboardPage() {
             </>
           ) : (
             <>
-              <div className="bg-white p-6 rounded-2xl shadow-md">
-                <p className="text-gray-500">Total Predictions</p>
-                <h2 className="text-4xl font-bold text-black mt-2">
-                  {formatNumber(metrics?.total_predictions ?? 0)}
-                </h2>
-                <p className="text-xs text-gray-400 mt-2">
+              <AnimatedCard className="liquid-glass-kpi soft-hover">
+                <p className="ds-label-telemetry">Total Predictions</p>
+                <p className="ds-metric-value text-sky-950 mt-2">
+                  <AnimatedNumber
+                    value={metrics?.total_predictions ?? 0}
+                    duration={0.8}
+                  />
+                </p>
+                <p className="ds-text-caption mt-2">
                   {formatNumber(metrics?.total_logs ?? 0)} audit logs
                 </p>
-              </div>
+              </AnimatedCard>
 
-              <div className="bg-white p-6 rounded-2xl shadow-md">
-                <p className="text-gray-500">High Risk Patients</p>
-                <h2 className="text-4xl font-bold text-red-600 mt-2">
-                  {formatNumber(metrics?.high_risk_patients ?? 0)}
-                </h2>
-              </div>
+              <AnimatedCard className="liquid-glass-kpi soft-hover">
+                <p className="ds-label-telemetry">High Risk</p>
+                <p className="ds-metric-value text-rose-600 mt-2">
+                  <AnimatedNumber
+                    value={metrics?.high_risk_patients ?? 0}
+                    duration={0.8}
+                  />
+                </p>
+              </AnimatedCard>
 
-              <div className="bg-white p-6 rounded-2xl shadow-md">
-                <p className="text-gray-500">Low Risk Patients</p>
-                <h2 className="text-4xl font-bold text-emerald-600 mt-2">
-                  {formatNumber(metrics?.low_risk_patients ?? 0)}
-                </h2>
-              </div>
+              <AnimatedCard className="liquid-glass-kpi soft-hover">
+                <p className="ds-label-telemetry">Low Risk</p>
+                <p className="ds-metric-value text-emerald-600 mt-2">
+                  <AnimatedNumber
+                    value={metrics?.low_risk_patients ?? 0}
+                    duration={0.8}
+                  />
+                </p>
+              </AnimatedCard>
 
-              <div className="bg-white p-6 rounded-2xl shadow-md">
-                <p className="text-gray-500">Average Risk Score</p>
-                <h2 className="text-4xl font-bold text-black mt-2">
-                  {formatNumber(metrics?.average_risk_score ?? 0, 2)}
-                </h2>
-                <p className="text-xs text-gray-400 mt-2">probability (0–1)</p>
-              </div>
+              <AnimatedCard className="liquid-glass-kpi soft-hover">
+                <p className="ds-label-telemetry">Avg Risk Score</p>
+                <p className="ds-metric-value text-sky-900 mt-2">
+                  <AnimatedNumber
+                    value={metrics?.average_risk_score ?? 0}
+                    duration={0.8}
+                    decimals={2}
+                  />
+                </p>
+                <p className="ds-text-caption mt-2">probability (0–1)</p>
+              </AnimatedCard>
             </>
           )}
-        </div>
+        </StaggerContainer>
 
-        {/* Population vitals strip */}
         {!loading && analytics && (
           <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-10">
-            <div className="bg-white px-5 py-4 rounded-xl shadow-sm border border-gray-100">
-              <p className="text-xs text-gray-500 uppercase tracking-wide">
-                Avg Blood Pressure
-              </p>
-              <p className="text-lg font-bold text-black mt-1">
+            <div className="liquid-glass-strip">
+              <p className="ds-label-telemetry">Avg Blood Pressure</p>
+              <p className="text-lg font-bold text-sky-950 mt-1 ds-font-mono">
                 {analytics.average_blood_pressure.systolic} /{" "}
-                {analytics.average_blood_pressure.diastolic}{" "}
-                <span className="text-sm font-normal text-gray-500">mmHg</span>
+                {analytics.average_blood_pressure.diastolic}
+                <span className="ds-metric-unit">mmHg</span>
               </p>
             </div>
-            <div className="bg-white px-5 py-4 rounded-xl shadow-sm border border-gray-100">
-              <p className="text-xs text-gray-500 uppercase tracking-wide">
-                Avg Cholesterol
-              </p>
-              <p className="text-lg font-bold text-black mt-1">
+            <div className="liquid-glass-strip">
+              <p className="ds-label-telemetry">Avg Cholesterol</p>
+              <p className="text-lg font-bold text-sky-950 mt-1 ds-font-mono">
                 {formatNumber(analytics.average_cholesterol, 1)}
               </p>
             </div>
-            <div className="bg-white px-5 py-4 rounded-xl shadow-sm border border-gray-100">
-              <p className="text-xs text-gray-500 uppercase tracking-wide">
-                Avg Patient Age
-              </p>
-              <p className="text-lg font-bold text-black mt-1">
-                {formatNumber(analytics.average_age, 1)} yrs
+            <div className="liquid-glass-strip">
+              <p className="ds-label-telemetry">Avg Patient Age</p>
+              <p className="text-lg font-bold text-sky-950 mt-1 ds-font-mono">
+                {formatNumber(analytics.average_age, 1)}
+                <span className="ds-metric-unit">yrs</span>
               </p>
             </div>
           </div>
         )}
 
-        {/* Charts */}
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-10">
-          <div className="bg-white p-6 rounded-2xl shadow-md">
-            <h2 className="text-2xl font-bold text-black mb-6">
-              Risk Distribution
-            </h2>
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
+          <ViewportFadeIn delay={0.2}>
+            <div className="liquid-glass-panel">
+              <h2 className="ds-heading-card text-sky-950 mb-6">Risk Distribution</h2>
 
-            {loading ? (
-              <div className="h-[300px] flex items-center justify-center">
-                <div className="h-10 w-10 border-4 border-gray-300 border-t-black rounded-full animate-spin" />
-              </div>
-            ) : pieData.length === 0 ||
-              pieData.every((d) => d.patients === 0) ? (
-              <div className="h-[300px] flex items-center justify-center text-gray-500">
-                No prediction data yet. Run predictions to populate charts.
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height={300}>
-                <PieChart>
-                  <Pie
-                    data={pieData}
-                    dataKey="patients"
-                    nameKey="name"
-                    outerRadius={110}
-                    label={({ name, percent }) =>
-                      `${name} ${((percent ?? 0) * 100).toFixed(0)}%`
-                    }
-                  >
-                    {pieData.map((_, index) => (
-                      <Cell
-                        key={`cell-${index}`}
-                        fill={COLORS[index % COLORS.length]}
-                      />
-                    ))}
-                  </Pie>
-                  <Tooltip
-                    formatter={(value, _name, item) => {
-                      const count = Number(value ?? 0);
-                      const pct = item?.payload?.percentage ?? 0;
-                      const label = item?.payload?.name ?? "Risk";
-                      return [`${count} patients (${pct}%)`, label];
-                    }}
-                  />
-                  <Legend />
-                </PieChart>
-              </ResponsiveContainer>
-            )}
-          </div>
+              {loading ? (
+                <div className="h-[300px] flex items-center justify-center">
+                  <div className="h-10 w-10 rounded-full liquid-spinner animate-spin" />
+                </div>
+              ) : pieData.length === 0 || pieData.every((d) => d.patients === 0) ? (
+                <div className="h-[300px] flex items-center justify-center ds-text-support">
+                  No prediction data yet. Run predictions to populate charts.
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={300}>
+                  <PieChart>
+                    <Pie
+                      data={pieData}
+                      dataKey="patients"
+                      nameKey="name"
+                      outerRadius={110}
+                      label={({ name, percent }) =>
+                        `${name} ${((percent ?? 0) * 100).toFixed(0)}%`
+                      }
+                    >
+                      {pieData.map((_, index) => (
+                        <Cell
+                          key={`cell-${index}`}
+                          fill={CHART_COLORS[index % CHART_COLORS.length]}
+                        />
+                      ))}
+                    </Pie>
+                    <Tooltip
+                      contentStyle={{
+                        background: "rgba(255,255,255,0.92)",
+                        border: "1px solid rgba(186,230,253,0.8)",
+                        borderRadius: "12px",
+                        backdropFilter: "blur(12px)",
+                      }}
+                      formatter={(value, _name, item) => {
+                        const count = Number(value ?? 0);
+                        const pct = item?.payload?.percentage ?? 0;
+                        const label = item?.payload?.name ?? "Risk";
+                        return [`${count} patients (${pct}%)`, label];
+                      }}
+                    />
+                    <Legend />
+                  </PieChart>
+                </ResponsiveContainer>
+              )}
+            </div>
+          </ViewportFadeIn>
 
-          <div className="bg-white p-6 rounded-2xl shadow-md">
-            <h2 className="text-2xl font-bold text-black mb-6">
-              Prediction Trends
-            </h2>
+          <ViewportFadeIn delay={0.3}>
+            <div className="liquid-glass-panel">
+              <h2 className="ds-heading-card text-sky-950 mb-6">Prediction Trends</h2>
 
-            {loading ? (
-              <div className="h-[300px] flex items-center justify-center">
-                <div className="h-10 w-10 border-4 border-gray-300 border-t-black rounded-full animate-spin" />
-              </div>
-            ) : trendsData.length === 0 ? (
-              <div className="h-[300px] flex items-center justify-center text-gray-500">
-                No trend data for the selected period.
-              </div>
-            ) : (
-              <ResponsiveContainer width="100%" height={300}>
+              {loading ? (
+                <div className="h-[300px] flex items-center justify-center">
+                  <div className="h-10 w-10 rounded-full liquid-spinner animate-spin" />
+                </div>
+              ) : trendsData.length === 0 ? (
+                <div className="h-[300px] flex items-center justify-center ds-text-support">
+                  No trend data for the selected period.
+                </div>
+              ) : (
+                <ResponsiveContainer width="100%" height={300}>
                 <BarChart data={trendsData}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f0f0f0" />
-                  <XAxis dataKey="date" tick={{ fontSize: 12 }} />
-                  <YAxis allowDecimals={false} />
+                  <CartesianGrid strokeDasharray="3 3" stroke={CHART_GRID} />
+                  <XAxis dataKey="date" tick={{ fontSize: 12, fill: "#64748b" }} />
+                  <YAxis allowDecimals={false} tick={{ fill: "#64748b" }} />
                   <Tooltip
+                    contentStyle={{
+                      background: "rgba(255,255,255,0.92)",
+                      border: "1px solid rgba(186,230,253,0.8)",
+                      borderRadius: "12px",
+                    }}
                     labelFormatter={(_, payload) =>
                       String(payload?.[0]?.payload?.fullDate ?? "")
                     }
                     formatter={(value, name) => {
                       const n = Number(value ?? 0);
-                      if (name === "predictions") {
-                        return [n, "Predictions"];
-                      }
+                      if (name === "predictions") return [n, "Predictions"];
                       return [n.toFixed(3), "Avg risk"];
                     }}
                   />
@@ -380,40 +397,44 @@ export default function DashboardPage() {
                   <Bar
                     dataKey="predictions"
                     name="Predictions"
-                    fill="#000000"
-                    radius={[8, 8, 0, 0]}
+                    fill={CHART_SKY}
+                    radius={[10, 10, 0, 0]}
                   />
                 </BarChart>
               </ResponsiveContainer>
             )}
-          </div>
+            </div>
+          </ViewportFadeIn>
         </div>
 
-        {/* Recent activity feed */}
-        <div className="bg-white p-6 rounded-2xl shadow-md">
+        <div className="liquid-glass-panel">
           <div className="flex items-center justify-between mb-6">
-            <h2 className="text-2xl font-bold text-black">Recent Activity</h2>
+            <h2 className="ds-heading-card text-sky-950">Recent Activity</h2>
             {!loading && data?.activity && (
-              <span className="text-sm text-gray-500">
-                {data.activity.count} events
-              </span>
+              <span className="status-pill-glass">{data.activity.count} events</span>
             )}
           </div>
 
           {loading ? (
             <div className="py-12 flex flex-col items-center justify-center">
-              <div className="h-8 w-8 border-4 border-gray-300 border-t-black rounded-full animate-spin mb-3" />
-              <p className="text-gray-500 font-medium">Loading activity feed…</p>
+              <div className="h-8 w-8 rounded-full liquid-spinner animate-spin mb-3" />
+              <p className="ds-text-support font-medium">Loading activity feed…</p>
             </div>
           ) : !data?.activity.activities.length ? (
-            <p className="py-10 text-center text-gray-500">
-              No recent predictions. Activity will appear here after inference
-              runs.
+            <p className="py-10 text-center ds-text-support">
+              No recent predictions. Activity will appear after inference runs.
             </p>
           ) : (
-            <div className="divide-y divide-gray-50">
-              {data.activity.activities.map((item) => (
-                <ActivityRow key={item.id} item={item} />
+            <div>
+              {data.activity.activities.map((item, idx) => (
+                <ListItem
+                  key={item.id}
+                  delay={idx * 0.05}
+                  variant="slideInLeft"
+                  hoverTranslate={4}
+                >
+                  <ActivityRow item={item} />
+                </ListItem>
               ))}
             </div>
           )}

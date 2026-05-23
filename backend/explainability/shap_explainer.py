@@ -2,11 +2,10 @@
 SHAP explainability for the federated healthcare cardiovascular model.
 
 Core API: explain_patient(patient) — used by FastAPI.
-Run as script: python shap_explainer.py — generates summary plot report.
+Run as script: python -m backend.explainability.shap_explainer
 """
 
 import os
-import sys
 
 import joblib
 import numpy as np
@@ -14,32 +13,25 @@ import pandas as pd
 import shap
 import torch
 
-BACKEND_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), ".."))
-sys.path.insert(0, BACKEND_ROOT)
-sys.path.insert(0, os.path.join(BACKEND_ROOT, "api"))
+from backend.api.feature_registry import build_feature_matrix
+from backend.api.feature_registry import get_feature_names
+from backend.api.feature_registry import get_scaler
+from backend.api.feature_registry import input_dimension
+from backend.api.feature_registry import patient_to_feature_dict
+from backend.api.predictor import DEVICE
+from backend.api.predictor import INPUT_DIM
+from backend.config import BACKEND_ROOT
+from backend.config import resolve_artifact_path
+from backend.config import settings
+from backend.model import FTTransformer
 
-from model import FTTransformer  # noqa: E402
+FEATURE_NAMES = get_feature_names()
 
-# Reuse predictor assets for identical inference + scaling
-from predictor import DEVICE, INPUT_DIM, scaler  # noqa: E402
+MODEL_PATH = resolve_artifact_path(settings.model_path)
+TEST_DATA_PATH = BACKEND_ROOT / "processed_data" / "test.csv"
+REPORTS_DIR = BACKEND_ROOT / "reports"
 
-FEATURE_NAMES = [
-    "age",
-    "gender",
-    "height",
-    "weight",
-    "ap_hi",
-    "ap_lo",
-    "cholesterol",
-    "gluc",
-    "smoke",
-    "alco",
-    "active",
-]
-
-MODEL_PATH = os.path.join(BACKEND_ROOT, "models", "global_federated_model.pth")
-TEST_DATA_PATH = os.path.join(BACKEND_ROOT, "processed_data", "test.csv")
-REPORTS_DIR = os.path.join(BACKEND_ROOT, "reports")
+scaler = get_scaler()
 
 _model = None
 _explainer = None
@@ -49,7 +41,7 @@ _background = None
 def _load_model():
     global _model
     if _model is None:
-        if not os.path.isfile(MODEL_PATH):
+        if not MODEL_PATH.is_file():
             raise FileNotFoundError(f"Model weights not found: {MODEL_PATH}")
         _model = FTTransformer(input_dim=INPUT_DIM)
         _model.load_state_dict(torch.load(MODEL_PATH, map_location=DEVICE))
@@ -61,14 +53,15 @@ def _load_model():
 def _load_background(max_samples: int = 100) -> np.ndarray:
     global _background
     if _background is None:
-        if not os.path.isfile(TEST_DATA_PATH):
+        if not TEST_DATA_PATH.is_file():
             raise FileNotFoundError(f"Background dataset not found: {TEST_DATA_PATH}")
         df = pd.read_csv(TEST_DATA_PATH)
-        X = df.drop(columns=["cardio"], errors="raise")
-        missing = set(FEATURE_NAMES) - set(X.columns)
+        X = df.drop(columns=["cardio"], errors="ignore")
+        names = get_feature_names()
+        missing = set(names) - set(X.columns)
         if missing:
             raise ValueError(f"Background data missing columns: {missing}")
-        _background = X[FEATURE_NAMES].values[:max_samples]
+        _background = X[names].values[:max_samples]
     return _background
 
 
@@ -90,29 +83,11 @@ def _get_explainer() -> shap.Explainer:
 
 
 def patient_to_dataframe(patient) -> pd.DataFrame:
-    """Build raw feature row from PatientData (same order as predictor.py)."""
-    return pd.DataFrame(
-        [
-            {
-                "age": patient.age,
-                "gender": patient.gender,
-                "height": patient.height,
-                "weight": patient.weight,
-                "ap_hi": patient.ap_hi,
-                "ap_lo": patient.ap_lo,
-                "cholesterol": patient.cholesterol,
-                "gluc": patient.gluc,
-                "smoke": patient.smoke,
-                "alco": patient.alco,
-                "active": patient.active,
-            }
-        ],
-        columns=FEATURE_NAMES,
-    )
+    row = patient_to_feature_dict(patient)
+    return pd.DataFrame([row], columns=FEATURE_NAMES)
 
 
 def _format_shap_output(shap_values: np.ndarray) -> dict:
-    """Map SHAP vector to API-friendly structures."""
     values = shap_values.flatten().tolist()
     shap_map = {
         name: round(float(val), 6) for name, val in zip(FEATURE_NAMES, values)
@@ -151,17 +126,10 @@ def _format_shap_output(shap_values: np.ndarray) -> dict:
 
 
 def explain_patient(patient) -> dict:
-    """
-    Compute SHAP explanation for one patient.
-
-    Uses predictor.predict() for risk_probability / risk_category (compatibility).
-    """
-    from predictor import predict  # local import avoids circular load at module init
+    from backend.api.predictor import predict
 
     prediction = predict(patient)
-
-    raw = patient_to_dataframe(patient)
-    scaled = scaler.transform(raw)
+    scaled = build_feature_matrix(patient)
 
     try:
         explainer = _get_explainer()
@@ -183,7 +151,6 @@ def generate_report(
     sample_size: int = 50,
     background_size: int = 100,
 ) -> str:
-    """CLI helper: write SHAP summary plot to reports/."""
     import matplotlib.pyplot as plt
 
     global _background, _explainer
@@ -199,7 +166,7 @@ def generate_report(
     shap_values = explainer(sample)
 
     os.makedirs(REPORTS_DIR, exist_ok=True)
-    out_path = os.path.join(REPORTS_DIR, "shap_summary.png")
+    out_path = REPORTS_DIR / "shap_summary.png"
 
     plt.figure()
     shap.summary_plot(
@@ -211,7 +178,7 @@ def generate_report(
     plt.savefig(out_path, bbox_inches="tight")
     plt.close()
 
-    return out_path
+    return str(out_path)
 
 
 if __name__ == "__main__":

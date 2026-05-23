@@ -3,7 +3,7 @@ In-memory demo users for JWT login.
 Passwords are loaded from environment variables — override in production.
 """
 
-from config import settings
+from backend.config import settings
 
 
 def _build_users_db() -> dict:

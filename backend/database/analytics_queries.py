@@ -12,8 +12,8 @@ from sqlalchemy import or_
 from sqlalchemy import desc
 from sqlalchemy.orm import Session
 
-from config import settings
-from database.models import PredictionLog
+from backend.config import settings
+from backend.database.models import PredictionLog
 
 
 # Align with predictor.py threshold (probability > 0.5 => High Risk)

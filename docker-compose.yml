@@ -6,8 +6,8 @@
 services:
   backend:
     build:
-      context: ./backend
-      dockerfile: Dockerfile
+      context: .
+      dockerfile: backend/Dockerfile
     container_name: fedhealth-backend
     ports:
       - "8000:8000"
@@ -25,13 +25,13 @@ services:
       AUTH_ADMIN_PASSWORD: ${AUTH_ADMIN_PASSWORD:-admin123}
       AUTH_DOCTOR_PASSWORD: ${AUTH_DOCTOR_PASSWORD:-doctor123}
       AUTH_ANALYST_PASSWORD: ${AUTH_ANALYST_PASSWORD:-analyst123}
-      MODEL_PATH: ${MODEL_PATH:-/app/models/global_federated_model.pth}
-      SCALER_PATH: ${SCALER_PATH:-/app/scalers/scaler.joblib}
+      MODEL_PATH: ${MODEL_PATH:-/app/backend/models/global_federated_model.pth}
+      SCALER_PATH: ${SCALER_PATH:-/app/backend/scalers/scaler.joblib}
     volumes:
-      - ./backend/models:/app/models
-      - ./backend/scalers:/app/scalers
-      - ./backend/processed_data:/app/processed_data
-      - ./backend/reports:/app/reports
+      - ./backend/models:/app/backend/models
+      - ./backend/scalers:/app/backend/scalers
+      - ./backend/processed_data:/app/backend/processed_data
+      - ./backend/reports:/app/backend/reports
     healthcheck:
       test:
         [

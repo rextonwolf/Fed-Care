@@ -1,0 +1,13 @@
+{
+  "primary_neural_disease": "heart_disease",
+  "node_count": 192,
+  "edge_count": 639,
+  "relationship_count": 639,
+  "datasets_used": [
+    "cardiovascular",
+    "diabetes",
+    "heart_disease_uci",
+    "mimic_icu",
+    "symptom_disease"
+  ]
+}

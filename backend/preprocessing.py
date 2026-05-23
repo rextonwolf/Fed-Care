@@ -1,3 +1,10 @@
+"""
+Legacy cardio-only preprocessing.
+
+For multi-dataset training (UCI + MIMIC + cardio), use:
+  python preprocessing_unified.py
+"""
+
 import pandas as pd
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import StandardScaler
@@ -97,7 +104,7 @@ test_df[TARGET_COLUMN] = y_test.values
 test_df.to_csv("processed_data/test.csv", index=False)
 
 # Final logs
-print("Preprocessing complete!")
+print("Preprocessing complete! (cardio-only — run preprocessing_unified.py for all cohorts)")
 print("Hospital A:", hospital_a.shape)
 print("Hospital B:", hospital_b.shape)
 print("Hospital C:", hospital_c.shape)

@@ -7,19 +7,12 @@ export default function Layout({
 }: {
   children: React.ReactNode;
 }) {
-
   return (
-
-    <div className="flex">
-
+    <div className="relative h-dvh w-full overflow-hidden">
       <Sidebar />
-
-      <main className="flex-1 p-8 bg-gray-100 min-h-screen">
-
+      <main className="app-shell-bg ml-64 h-dvh overflow-y-auto overflow-x-hidden p-6 md:p-8">
         {children}
-
       </main>
-
     </div>
   );
 }

@@ -6,15 +6,15 @@ from fastapi import HTTPException
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import SQLAlchemyError
 
-from database import analytics_queries as aq
+from backend.database import analytics_queries as aq
 
-from analytics_schemas import SystemMetricsResponse
-from analytics_schemas import PredictionAnalyticsResponse
-from analytics_schemas import RecentActivityResponse
-from analytics_schemas import RiskDistributionItem
-from analytics_schemas import BloodPressureAverages
-from analytics_schemas import PredictionTrendPoint
-from analytics_schemas import RecentActivityItem
+from backend.api.analytics_schemas import BloodPressureAverages
+from backend.api.analytics_schemas import PredictionAnalyticsResponse
+from backend.api.analytics_schemas import PredictionTrendPoint
+from backend.api.analytics_schemas import RecentActivityItem
+from backend.api.analytics_schemas import RecentActivityResponse
+from backend.api.analytics_schemas import RiskDistributionItem
+from backend.api.analytics_schemas import SystemMetricsResponse
 
 
 def _handle_db_error(exc: Exception) -> None:

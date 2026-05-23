@@ -1,21 +1,13 @@
 import os
-import sys
-import torch
-import pandas as pd
+
 import numpy as np
-
-from sklearn.metrics import accuracy_score
-
+import pandas as pd
+import torch
 from fairlearn.metrics import MetricFrame
 from fairlearn.metrics import selection_rate
+from sklearn.metrics import accuracy_score
 
-sys.path.append(
-    os.path.abspath(
-        os.path.join(os.path.dirname(__file__), "..")
-    )
-)
-
-from model import FTTransformer
+from backend.model import FTTransformer
 
 
 # Device

@@ -15,6 +15,7 @@ bcrypt==5.0.0
 # Database
 sqlalchemy==2.0.49
 psycopg2-binary==2.9.11
+pydantic==2.13.0
 
 # Configuration
 python-dotenv==1.2.1
@@ -27,6 +28,7 @@ scipy==1.16.3
 joblib==1.5.3
 shap==0.51.0
 networkx==3.6.1
+torch==2.5.1
 
 # SHAP / explainability support
 numba==0.65.1
@@ -34,6 +36,16 @@ cloudpickle==3.1.2
 slicer==0.0.8
 tqdm==4.67.3
 
-# Optional report generation (shap_explainer CLI)
+# Federated Learning
+flwr==1.13.2
+
+# Reports & visualization
 matplotlib==3.10.9
-torch
+seaborn==0.13.2
+
+# Fairness
+fairlearn==0.11.0
+
+# Monitoring & utilities
+requests==2.32.3
+python-dateutil==2.9.0

@@ -198,6 +198,21 @@ cache/
 .terraform/
 *.tfstate
 *.tfstate.*
+
+# =============================================================================
+# Data & Artifacts
+# =============================================================================
+processed_data/
+outputs/
+.streamlit/
+
+# =============================================================================
+# VS Code Workspace Settings (user-specific)
+# =============================================================================
+.vscode/*.json
+!.vscode/extensions.json
+!.vscode/settings.json.example
+!.vscode/launch.json.example
 .terraform.lock.hcl
 *.kubeconfig
 kubeconfig*

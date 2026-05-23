@@ -1,6 +1,7 @@
 "use client";
 
 import { useCallback, useEffect, useState } from "react";
+import { motion } from "framer-motion";
 import Layout from "../components/Layout";
 import {
   BarChart,
@@ -27,9 +28,9 @@ import { isAuthenticated } from "../../lib/auth";
 import {
   StaggerContainer,
   AnimatedCard,
-  ViewportFadeIn,
   ListItem,
   AnimatedNumber,
+  EntranceChip,
 } from "../components/MotionLibrary";
 
 const REFRESH_INTERVAL_MS = 30_000;
@@ -77,7 +78,9 @@ function ActivityRow({ item }: { item: RecentActivityItem }) {
         <span className="text-sm font-medium text-sky-900 ds-font-mono">
           {riskPct}%
         </span>
-        <span className={riskBadgeClass(item.risk_category)}>{label}</span>
+        <EntranceChip className={riskBadgeClass(item.risk_category)}>
+          {label}
+        </EntranceChip>
       </div>
     </div>
   );
@@ -167,7 +170,12 @@ export default function DashboardPage() {
   return (
     <Layout>
       <div className="page-enter max-w-[1600px] mx-auto">
-        <div className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8">
+        <motion.div
+          initial={{ opacity: 0, y: 12 }}
+          animate={{ opacity: 1, y: 0 }}
+          transition={{ duration: 0.55, ease: [0.16, 1, 0.3, 1] }}
+          className="flex flex-col md:flex-row md:items-center md:justify-between gap-4 mb-8"
+        >
           <div>
             <span className="status-pill status-pill--primary mb-3">
               Live analytics
@@ -204,7 +212,7 @@ export default function DashboardPage() {
               Refresh
             </button>
           </div>
-        </div>
+        </motion.div>
 
         {error && (
           <div className="liquid-glass-error mb-6 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
@@ -308,8 +316,7 @@ export default function DashboardPage() {
         )}
 
         <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mb-10">
-          <ViewportFadeIn delay={0.2}>
-            <div className="liquid-glass-panel">
+          <AnimatedCard delay={0.12} className="liquid-glass-panel soft-hover glow-hover">
               <h2 className="ds-heading-card text-sky-950 mb-6">Risk Distribution</h2>
 
               {loading ? (
@@ -357,11 +364,9 @@ export default function DashboardPage() {
                   </PieChart>
                 </ResponsiveContainer>
               )}
-            </div>
-          </ViewportFadeIn>
+          </AnimatedCard>
 
-          <ViewportFadeIn delay={0.3}>
-            <div className="liquid-glass-panel">
+          <AnimatedCard delay={0.18} className="liquid-glass-panel soft-hover glow-hover">
               <h2 className="ds-heading-card text-sky-950 mb-6">Prediction Trends</h2>
 
               {loading ? (
@@ -403,11 +408,10 @@ export default function DashboardPage() {
                 </BarChart>
               </ResponsiveContainer>
             )}
-            </div>
-          </ViewportFadeIn>
+          </AnimatedCard>
         </div>
 
-        <div className="liquid-glass-panel">
+        <AnimatedCard delay={0.24} className="liquid-glass-panel soft-hover glow-hover">
           <div className="flex items-center justify-between mb-6">
             <h2 className="ds-heading-card text-sky-950">Recent Activity</h2>
             {!loading && data?.activity && (
@@ -438,7 +442,7 @@ export default function DashboardPage() {
               ))}
             </div>
           )}
-        </div>
+        </AnimatedCard>
       </div>
     </Layout>
   );

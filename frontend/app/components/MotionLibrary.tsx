@@ -1,14 +1,14 @@
 'use client';
 
 import React from 'react';
-import { motion, Variants, MotionProps, AnimatePresence } from 'framer-motion';
+import { motion, Variants, MotionProps, AnimatePresence, useReducedMotion } from 'framer-motion';
 
 // ============================================================================
 // ANIMATION VARIANTS
 // ============================================================================
 
 export const fadeUpVariant: Variants = {
-  hidden: { opacity: 0, y: 20 },
+  hidden: { opacity: 0, y: 18, scale: 0.985 },
   visible: { opacity: 1, y: 0 },
 };
 
@@ -28,7 +28,7 @@ export const slideInRightVariant: Variants = {
 };
 
 export const scaleBlurInVariant: Variants = {
-  hidden: { opacity: 0, scale: 0.95, filter: 'blur(10px)' },
+  hidden: { opacity: 0, scale: 0.96, filter: 'blur(6px)' },
   visible: { opacity: 1, scale: 1, filter: 'blur(0px)' },
 };
 
@@ -55,6 +55,7 @@ interface StaggerContainerProps extends MotionProps {
   delay?: number;
   staggerValue?: number;
   delayChildren?: number;
+  className?: string;
 }
 
 export const StaggerContainer: React.FC<StaggerContainerProps> = ({
@@ -92,25 +93,28 @@ interface AnimatedCardProps extends MotionProps {
   delay?: number;
   hoverScale?: number;
   hoverY?: number;
+  className?: string;
 }
 
 export const AnimatedCard: React.FC<AnimatedCardProps> = ({
   children,
   delay = 0,
-  hoverScale = 1.03,
-  hoverY = -4,
+  hoverScale = 1.015,
+  hoverY = -2,
   ...props
 }) => {
+  const prefersReducedMotion = useReducedMotion();
+
   return (
     <motion.div
       variants={fadeUpVariant}
       initial="hidden"
       animate="visible"
       transition={{ ...springTransition, delay }}
-      whileHover={{
+      whileHover={prefersReducedMotion ? undefined : {
         scale: hoverScale,
         y: hoverY,
-        transition: { duration: 0.2 },
+        transition: { type: 'spring', stiffness: 220, damping: 24, mass: 0.8 },
       }}
       {...props}
     >
@@ -138,28 +142,53 @@ export const AnimatedNumber: React.FC<AnimatedNumberProps> = ({
   prefix = '',
   suffix = '',
 }) => {
+  const prefersReducedMotion = useReducedMotion();
   const [displayValue, setDisplayValue] = React.useState(0);
+  const currentValueRef = React.useRef(0);
+  const animationIdRef = React.useRef<number | null>(null);
 
   React.useEffect(() => {
-    let startTime: number;
-    let animationId: number;
+    if (prefersReducedMotion) {
+      animationIdRef.current = requestAnimationFrame(() => {
+        setDisplayValue(value);
+        currentValueRef.current = value;
+      });
+      return;
+    }
+
+    const fromValue = currentValueRef.current;
+    const delta = value - fromValue;
+    let startTime: number | undefined;
+
+    if (animationIdRef.current != null) {
+      cancelAnimationFrame(animationIdRef.current);
+    }
 
     const animate = (currentTime: number) => {
-      if (!startTime) startTime = currentTime;
+      if (startTime === undefined) startTime = currentTime;
       const elapsed = currentTime - startTime;
       const progress = Math.min(elapsed / (duration * 1000), 1);
+      const eased = 1 - Math.pow(1 - progress, 3);
 
-      setDisplayValue(Math.floor(value * progress * Math.pow(10, decimals)) / Math.pow(10, decimals));
+      const nextValue = fromValue + delta * eased;
+      setDisplayValue(nextValue);
+      currentValueRef.current = nextValue;
 
       if (progress < 1) {
-        animationId = requestAnimationFrame(animate);
+        animationIdRef.current = requestAnimationFrame(animate);
+      } else {
+        currentValueRef.current = value;
       }
     };
 
-    animationId = requestAnimationFrame(animate);
+    animationIdRef.current = requestAnimationFrame(animate);
 
-    return () => cancelAnimationFrame(animationId);
-  }, [value, duration, decimals]);
+    return () => {
+      if (animationIdRef.current != null) {
+        cancelAnimationFrame(animationIdRef.current);
+      }
+    };
+  }, [value, duration, decimals, prefersReducedMotion]);
 
   return (
     <span className="font-mono">
@@ -183,10 +212,10 @@ interface AnimatedProgressBarProps {
 }
 
 const colorMap: Record<string, { bar: string; glow: string }> = {
-  cyan: { bar: 'bg-cyan-500', glow: '0 0 12px rgba(34,211,238,0.6)' },
-  emerald: { bar: 'bg-emerald-500', glow: '0 0 12px rgba(5,150,105,0.6)' },
-  red: { bar: 'bg-red-500', glow: '0 0 12px rgba(220,38,38,0.6)' },
-  yellow: { bar: 'bg-yellow-500', glow: '0 0 12px rgba(234,179,8,0.6)' },
+  cyan: { bar: 'bg-gradient-to-r from-cyan-400 via-sky-500 to-blue-600', glow: '0 0 16px rgba(34,211,238,0.35)' },
+  emerald: { bar: 'bg-gradient-to-r from-emerald-400 via-emerald-500 to-teal-600', glow: '0 0 16px rgba(5,150,105,0.35)' },
+  red: { bar: 'bg-gradient-to-r from-rose-400 via-red-500 to-rose-600', glow: '0 0 16px rgba(220,38,38,0.32)' },
+  yellow: { bar: 'bg-gradient-to-r from-amber-300 via-yellow-400 to-orange-500', glow: '0 0 16px rgba(234,179,8,0.3)' },
 };
 
 export const AnimatedProgressBar: React.FC<AnimatedProgressBarProps> = ({
@@ -199,13 +228,13 @@ export const AnimatedProgressBar: React.FC<AnimatedProgressBarProps> = ({
   const { bar, glow } = colorMap[color];
 
   return (
-    <div className={`h-2 w-full overflow-hidden rounded-full bg-slate-200 ${className}`}>
+    <div className={`h-2 w-full overflow-hidden rounded-full bg-slate-200/70 ${className}`}>
       <motion.div
-        className={`h-full rounded-full ${bar}`}
-        initial={{ width: 0 }}
-        animate={{ width: `${Math.min(100, value)}%` }}
-        transition={{ duration, ease: 'easeOut' }}
-        style={showGlow ? { boxShadow: glow } : {}}
+        className={`relative h-full rounded-full ${bar}`}
+        initial={{ width: 0, opacity: 0.85 }}
+        animate={{ width: `${Math.min(100, value)}%`, opacity: 1 }}
+        transition={{ duration, ease: [0.16, 1, 0.3, 1] }}
+        style={showGlow ? { boxShadow: glow } : undefined}
       />
     </div>
   );
@@ -219,6 +248,7 @@ interface EntranceChipProps extends MotionProps {
   children: React.ReactNode;
   delay?: number;
   onRemove?: () => void;
+  className?: string;
 }
 
 export const EntranceChip: React.FC<EntranceChipProps> = ({
@@ -227,6 +257,8 @@ export const EntranceChip: React.FC<EntranceChipProps> = ({
   onRemove,
   ...props
 }) => {
+  const prefersReducedMotion = useReducedMotion();
+
   return (
     <motion.div
       variants={chipPopVariant}
@@ -234,7 +266,7 @@ export const EntranceChip: React.FC<EntranceChipProps> = ({
       animate="visible"
       exit="exit"
       transition={{ ...springTransition, delay }}
-      whileHover={{ scale: 1.05 }}
+      whileHover={prefersReducedMotion ? undefined : { scale: 1.04, y: -1 }}
       {...props}
     >
       {children}
@@ -250,6 +282,7 @@ interface ResultCardProps extends MotionProps {
   children: React.ReactNode;
   isHighRisk?: boolean;
   duration?: number;
+  className?: string;
 }
 
 export const ResultCard: React.FC<ResultCardProps> = ({
@@ -258,17 +291,18 @@ export const ResultCard: React.FC<ResultCardProps> = ({
   duration = 0.6,
   ...props
 }) => {
+  const prefersReducedMotion = useReducedMotion();
   const glowColor = isHighRisk ? 'rgba(220,38,38,0.2)' : 'rgba(5,150,105,0.2)';
 
   return (
     <motion.div
-      initial={{ opacity: 0, scale: 0.95, filter: 'blur(10px)' }}
+      initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, scale: 0.965, filter: 'blur(6px)' }}
       animate={{
         opacity: 1,
         scale: 1,
         filter: 'blur(0px)',
       }}
-      transition={{ duration, type: 'spring', bounce: 0.3 }}
+      transition={{ duration, type: 'spring', stiffness: 140, damping: 18 }}
       style={{
         boxShadow: `0 0 40px ${glowColor}`,
       }}
@@ -289,6 +323,7 @@ interface ListItemProps extends MotionProps {
   variant?: 'slideInLeft' | 'slideInRight' | 'fadeUp' | 'scalePop';
   hoverTranslate?: number;
   hoverScale?: number;
+  className?: string;
 }
 
 const variantMap: Record<string, Variants> = {
@@ -306,6 +341,8 @@ export const ListItem: React.FC<ListItemProps> = ({
   hoverScale = 1,
   ...props
 }) => {
+  const prefersReducedMotion = useReducedMotion();
+
   return (
     <motion.div
       variants={variantMap[variant]}
@@ -314,11 +351,14 @@ export const ListItem: React.FC<ListItemProps> = ({
       viewport={{ once: true, amount: 0.5 }}
       transition={{ ...springTransition, delay }}
       whileHover={
+        prefersReducedMotion
+          ? undefined
+          :
         hoverTranslate !== 0 || hoverScale !== 1
           ? {
               x: hoverTranslate,
               scale: hoverScale,
-              transition: { duration: 0.2 },
+              transition: { type: 'spring', stiffness: 260, damping: 24 },
             }
           : undefined
       }
@@ -367,6 +407,7 @@ interface ViewportFadeInProps extends MotionProps {
   children: React.ReactNode;
   delay?: number;
   duration?: number;
+  className?: string;
 }
 
 export const ViewportFadeIn: React.FC<ViewportFadeInProps> = ({
@@ -375,12 +416,14 @@ export const ViewportFadeIn: React.FC<ViewportFadeInProps> = ({
   duration = 0.6,
   ...props
 }) => {
+  const prefersReducedMotion = useReducedMotion();
+
   return (
     <motion.div
-      initial={{ opacity: 0 }}
-      whileInView={{ opacity: 1 }}
+      initial={prefersReducedMotion ? { opacity: 0 } : { opacity: 0, y: 16, scale: 0.985 }}
+      whileInView={{ opacity: 1, y: 0, scale: 1 }}
       viewport={{ once: true, amount: 0.3 }}
-      transition={{ duration, delay }}
+      transition={{ duration, delay, ease: [0.16, 1, 0.3, 1] }}
       {...props}
     >
       {children}

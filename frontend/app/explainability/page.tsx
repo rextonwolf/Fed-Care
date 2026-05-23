@@ -247,35 +247,7 @@ export default function ExplainabilityPage() {
 
       setData(response.data.data);
       setPatient(payload);
-      // also fetch lightweight validation from /predict for the same payload
-      try {
-        const token = typeof window !== "undefined" ? localStorage.getItem("token") : null;
-        if (token) {
-          const vresp = await axios.post(
-            `${API_URL.replace(/\/explainability$/, "")}/predict`,
-            {
-              age: Number(payload.age),
-              gender: Number(payload.gender),
-              height: Number(payload.height),
-              weight: Number(payload.weight),
-              ap_hi: Number(payload.ap_hi),
-              ap_lo: Number(payload.ap_lo),
-              cholesterol: Number(payload.cholesterol),
-              gluc: Number(payload.gluc),
-              smoke: Number(payload.smoke),
-              alco: Number(payload.alco),
-              active: Number(payload.active),
-            },
-            {
-              headers: { Authorization: `Bearer ${token}` },
-            }
-          );
-          setValidation(vresp.data ?? null);
-        }
-      } catch (err) {
-        // ignore validation fetch failures — explainability still shows
-        setValidation(null);
-      }
+      setValidation(null);
     } catch (err) {
       setError(getApiErrorMessage(err));
       setData(null);
@@ -436,7 +408,7 @@ export default function ExplainabilityPage() {
 
         {!loading && data && (
           <>
-            {/* AI Validation panel (uses validation fetched from /predict) */}
+            {/* AI Validation panel */}
             <div className="mb-6">
               <AIValidationPanel
                 confidence_score={validation?.confidence_score ?? null}

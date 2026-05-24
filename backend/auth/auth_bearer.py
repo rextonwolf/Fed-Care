@@ -17,11 +17,11 @@ class JWTBearer(HTTPBearer):
 
             try:
 
-                decode_token(
+                payload = decode_token(
                     credentials.credentials
                 )
 
-                return credentials.credentials
+                return payload
 
             except Exception:
 

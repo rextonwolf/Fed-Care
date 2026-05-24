@@ -12,6 +12,37 @@ from datetime import datetime
 from backend.database.database import Base
 
 
+class Hospital(Base):
+    """Hospital boundary used for lightweight multi-site data ownership."""
+
+    __tablename__ = "hospitals"
+
+    id = Column(Integer, primary_key=True, index=True)
+    name = Column(String(255), unique=True, nullable=False, index=True)
+    location = Column(String(255), nullable=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    users = relationship("User", back_populates="hospital")
+    patients = relationship("Patient", back_populates="hospital")
+    prediction_logs = relationship("PredictionLog", back_populates="hospital")
+    dataset_uploads = relationship("DatasetUpload", back_populates="hospital")
+
+
+class User(Base):
+    """Simple seeded application user for role-based access foundation."""
+
+    __tablename__ = "users"
+
+    id = Column(Integer, primary_key=True, index=True)
+    username = Column(String(255), unique=True, nullable=False, index=True)
+    password = Column(String(255), nullable=False)
+    role = Column(String(32), nullable=False, index=True)
+    hospital_id = Column(Integer, ForeignKey("hospitals.id"), nullable=True, index=True)
+    created_at = Column(DateTime, default=datetime.utcnow)
+
+    hospital = relationship("Hospital", back_populates="users")
+
+
 class Patient(Base):
     """
     Longitudinal patient profile for prediction and report history.
@@ -24,6 +55,7 @@ class Patient(Base):
     patient_uid = Column(String(36), unique=True, index=True, nullable=False)
     display_name = Column(String(255), nullable=False)
     medical_record_number = Column(String(64), nullable=True, index=True)
+    hospital_id = Column(Integer, ForeignKey("hospitals.id"), nullable=True, index=True)
     notes = Column(Text, nullable=True)
     created_at = Column(DateTime, default=datetime.utcnow)
     updated_at = Column(
@@ -37,6 +69,7 @@ class Patient(Base):
         back_populates="patient",
         order_by="desc(PredictionLog.timestamp)",
     )
+    hospital = relationship("Hospital", back_populates="patients")
 
 
 class PredictionLog(Base):
@@ -52,6 +85,7 @@ class PredictionLog(Base):
         nullable=True,
         index=True,
     )
+    hospital_id = Column(Integer, ForeignKey("hospitals.id"), nullable=True, index=True)
 
     age = Column(Float)
     gender = Column(Float)
@@ -82,6 +116,7 @@ class PredictionLog(Base):
     source = Column(String(32), default="manual")
 
     patient = relationship("Patient", back_populates="predictions")
+    hospital = relationship("Hospital", back_populates="prediction_logs")
 
 
 class FederatedClient(Base):
@@ -114,3 +149,17 @@ class FederatedRound(Base):
     aggregation_loss = Column(Float, default=0.0)
     aggregation_status = Column(String, default="complete")
     created_at = Column(DateTime, default=datetime.utcnow)
+
+
+class DatasetUpload(Base):
+    """Metadata for hospital-validated local dataset uploads."""
+
+    __tablename__ = "dataset_uploads"
+
+    id = Column(Integer, primary_key=True, index=True)
+    filename = Column(String(255), nullable=False)
+    uploaded_by = Column(String(255), nullable=False)
+    hospital_id = Column(Integer, ForeignKey("hospitals.id"), nullable=True, index=True)
+    upload_timestamp = Column(DateTime, default=datetime.utcnow)
+
+    hospital = relationship("Hospital", back_populates="dataset_uploads")

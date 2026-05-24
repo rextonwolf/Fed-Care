@@ -27,6 +27,7 @@ def search_patients(
     db: Session,
     q: str,
     limit: int = 20,
+    hospital_id: int | None = None,
 ) -> PatientSearchResponse:
     """
     Search patients by UUID or display name.
@@ -42,7 +43,7 @@ def search_patients(
     limit = max(1, min(limit, 50))
 
     try:
-        rows = pc.search_patients(db, query, limit=limit)
+        rows = pc.search_patients(db, query, limit=limit, hospital_id=hospital_id)
         results = [_to_summary(db, p) for p in rows]
         return PatientSearchResponse(
             query=query,
@@ -53,9 +54,9 @@ def search_patients(
         _handle_db_error(exc)
 
 
-def get_patient_summary(db: Session, patient_id: int) -> PatientSummary:
+def get_patient_summary(db: Session, patient_id: int, hospital_id: int | None = None) -> PatientSummary:
     """Refresh a single patient row with latest prediction stats."""
-    patient = pc.get_patient(db, patient_id)
+    patient = pc.get_patient(db, patient_id, hospital_id=hospital_id)
     if not patient:
         raise HTTPException(status_code=404, detail="Patient not found")
     return _to_summary(db, patient)

@@ -1,36 +1,39 @@
 # Core ML
-torch
-torchvision
-numpy
-pandas
-scikit-learn
-joblib
+torch==2.5.1
+torchvision==0.20.1
+numpy==2.4.6
+pandas==3.0.3
+scikit-learn==1.8.0
+joblib==1.5.3
 
 # Federated Learning
-flwr
+flwr==1.13.2
 
 # Explainability & Fairness
-shap
-matplotlib
-seaborn
-fairlearn
+shap==0.51.0
+matplotlib==3.10.9
+seaborn==0.13.2
+fairlearn==0.11.0
 
 # Backend API
-fastapi
-uvicorn
-pydantic
+fastapi==0.136.1
+uvicorn[standard]==0.47.0
+pydantic==2.13.0
 
 # Security & Authentication
-python-jose
-passlib
-bcrypt
-python-multipart
+python-jose[cryptography]==3.5.0
+passlib[bcrypt]==1.7.4
+bcrypt==5.0.0
+python-multipart==0.0.29
 
 # Database
-sqlalchemy
+sqlalchemy==2.0.49
+psycopg2-binary==2.9.11
 
 # Frontend API Requests
-requests
+requests==2.32.3
 
 # Utilities
-python-dotenv
+python-dotenv==1.2.1
+python-dateutil==2.9.0
+tqdm==4.67.3

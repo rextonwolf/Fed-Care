@@ -26,6 +26,7 @@ class PatientSummary(BaseModel):
     patient_uid: str
     display_name: str
     medical_record_number: Optional[str] = None
+    hospital_name: Optional[str] = None
     prediction_count: int = 0
     latest_risk_probability: Optional[float] = None
     latest_risk_category: Optional[str] = None
@@ -46,9 +47,16 @@ class PredictionHistoryItem(BaseModel):
     source: str = "manual"
     timestamp: Optional[str] = None
     age: Optional[float] = None
+    gender: Optional[float] = None
+    height: Optional[float] = None
+    weight: Optional[float] = None
     ap_hi: Optional[float] = None
     ap_lo: Optional[float] = None
     cholesterol: Optional[float] = None
+    gluc: Optional[float] = None
+    smoke: Optional[float] = None
+    alco: Optional[float] = None
+    active: Optional[float] = None
 
 
 class PatientHistoryResponse(BaseModel):

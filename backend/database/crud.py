@@ -1,7 +1,14 @@
 from sqlalchemy.orm import Session
 
 from backend.config import settings
+from backend.database.models import Hospital
+from backend.database.models import Patient
 from backend.database.models import PredictionLog
+
+
+def _default_hospital_id(db: Session) -> int | None:
+    hospital = db.query(Hospital).order_by(Hospital.id.asc()).first()
+    return hospital.id if hospital else None
 
 
 def create_prediction_log(
@@ -9,10 +16,12 @@ def create_prediction_log(
     patient_data,
     prediction_result,
     source: str = "manual",
+    hospital_id: int | None = None,
 ):
 
     log = PredictionLog(
         patient_id=getattr(patient_data, "patient_id", None),
+        hospital_id=None,
         age=patient_data.age,
         gender=patient_data.gender,
         height=patient_data.height,
@@ -40,10 +49,19 @@ def create_prediction_log(
         source=source,
     )
 
+    # Prefer hospital from the caller (current_user), then patient, then default
+    if hospital_id is not None:
+        log.hospital_id = hospital_id
+    elif log.patient_id:
+        patient = db.query(Patient).filter(Patient.id == log.patient_id).first()
+        if patient:
+            log.hospital_id = patient.hospital_id or _default_hospital_id(db)
+    if log.hospital_id is None:
+        log.hospital_id = _default_hospital_id(db)
+
     db.add(log)
 
     if log.patient_id:
-        from backend.database.models import Patient
         patient = db.query(Patient).filter(Patient.id == log.patient_id).first()
         if patient:
             from datetime import datetime

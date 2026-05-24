@@ -1,6 +1,6 @@
 """
 Lightweight schema compatibility for existing PostgreSQL deployments.
-Ensures prediction_logs columns required by the ORM exist before analytics queries run.
+Ensures hospital ownership columns exist before analytics and auth queries run.
 """
 
 from sqlalchemy import inspect
@@ -13,26 +13,50 @@ def ensure_schema_compat(engine: Engine) -> None:
     Add missing columns when upgrading without Alembic.
     Idempotent on PostgreSQL (IF NOT EXISTS).
     """
-    inspector = inspect(engine)
-
-    if not inspector.has_table("prediction_logs"):
-        return
-
-    columns = {col["name"] for col in inspector.get_columns("prediction_logs")}
-
     with engine.begin() as conn:
-        if "patient_id" not in columns:
-            conn.execute(
-                text(
-                    "ALTER TABLE prediction_logs "
-                    "ADD COLUMN IF NOT EXISTS patient_id INTEGER"
+        inspector = inspect(conn)
+
+        if inspector.has_table("patients"):
+            patient_columns = {col["name"] for col in inspector.get_columns("patients")}
+            if "hospital_id" not in patient_columns:
+                conn.execute(
+                    text(
+                        "ALTER TABLE patients "
+                        "ADD COLUMN IF NOT EXISTS hospital_id INTEGER"
+                    )
                 )
-            )
-        if "source" not in columns:
-            conn.execute(
-                text(
-                    "ALTER TABLE prediction_logs "
-                    "ADD COLUMN IF NOT EXISTS source VARCHAR(32) "
-                    "DEFAULT 'manual'"
+
+        if inspector.has_table("prediction_logs"):
+            log_columns = {col["name"] for col in inspector.get_columns("prediction_logs")}
+            if "patient_id" not in log_columns:
+                conn.execute(
+                    text(
+                        "ALTER TABLE prediction_logs "
+                        "ADD COLUMN IF NOT EXISTS patient_id INTEGER"
+                    )
                 )
-            )
+            if "source" not in log_columns:
+                conn.execute(
+                    text(
+                        "ALTER TABLE prediction_logs "
+                        "ADD COLUMN IF NOT EXISTS source VARCHAR(32) "
+                        "DEFAULT 'manual'"
+                    )
+                )
+            if "hospital_id" not in log_columns:
+                conn.execute(
+                    text(
+                        "ALTER TABLE prediction_logs "
+                        "ADD COLUMN IF NOT EXISTS hospital_id INTEGER"
+                    )
+                )
+
+        if inspector.has_table("users"):
+            user_columns = {col["name"] for col in inspector.get_columns("users")}
+            if "hospital_id" not in user_columns:
+                conn.execute(
+                    text(
+                        "ALTER TABLE users "
+                        "ADD COLUMN IF NOT EXISTS hospital_id INTEGER"
+                    )
+                )

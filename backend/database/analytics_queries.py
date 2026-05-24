@@ -40,40 +40,40 @@ def _low_risk_condition():
     )
 
 
-def count_predictions(db: Session) -> int:
-    return db.query(func.count(PredictionLog.id)).scalar() or 0
+def count_predictions(db: Session, hospital_id: int | None = None) -> int:
+    q = db.query(func.count(PredictionLog.id))
+    if hospital_id is not None:
+        q = q.filter(PredictionLog.hospital_id == hospital_id)
+    return q.scalar() or 0
 
 
-def count_high_risk(db: Session) -> int:
-    return (
-        db.query(func.count(PredictionLog.id))
-        .filter(_high_risk_condition())
-        .scalar()
-        or 0
-    )
+def count_high_risk(db: Session, hospital_id: int | None = None) -> int:
+    q = db.query(func.count(PredictionLog.id)).filter(_high_risk_condition())
+    if hospital_id is not None:
+        q = q.filter(PredictionLog.hospital_id == hospital_id)
+    return q.scalar() or 0
 
 
-def count_low_risk(db: Session) -> int:
-    return (
-        db.query(func.count(PredictionLog.id))
-        .filter(_low_risk_condition())
-        .scalar()
-        or 0
-    )
+def count_low_risk(db: Session, hospital_id: int | None = None) -> int:
+    q = db.query(func.count(PredictionLog.id)).filter(_low_risk_condition())
+    if hospital_id is not None:
+        q = q.filter(PredictionLog.hospital_id == hospital_id)
+    return q.scalar() or 0
 
 
-def average_risk_score(db: Session) -> float:
-    value = db.query(func.avg(PredictionLog.risk_probability)).scalar()
+def average_risk_score(db: Session, hospital_id: int | None = None) -> float:
+    q = db.query(func.avg(PredictionLog.risk_probability))
+    if hospital_id is not None:
+        q = q.filter(PredictionLog.hospital_id == hospital_id)
+    value = q.scalar()
     return round(float(value or 0.0), 4)
 
 
-def latest_model_version(db: Session) -> str:
-    row = (
-        db.query(PredictionLog.model_version)
-        .filter(PredictionLog.model_version.isnot(None))
-        .order_by(desc(PredictionLog.timestamp))
-        .first()
-    )
+def latest_model_version(db: Session, hospital_id: int | None = None) -> str:
+    q = db.query(PredictionLog.model_version).filter(PredictionLog.model_version.isnot(None))
+    if hospital_id is not None:
+        q = q.filter(PredictionLog.hospital_id == hospital_id)
+    row = q.order_by(desc(PredictionLog.timestamp)).first()
     if row and row[0]:
         return row[0]
     return DEFAULT_MODEL_VERSION
@@ -82,18 +82,16 @@ def latest_model_version(db: Session) -> str:
 def recent_prediction_within_hours(
     db: Session,
     hours: int = 24,
+    hospital_id: int | None = None,
 ) -> bool:
     cutoff = datetime.utcnow() - timedelta(hours=hours)
-    return (
-        db.query(PredictionLog.id)
-        .filter(PredictionLog.timestamp >= cutoff)
-        .limit(1)
-        .first()
-        is not None
-    )
+    q = db.query(PredictionLog.id).filter(PredictionLog.timestamp >= cutoff)
+    if hospital_id is not None:
+        q = q.filter(PredictionLog.hospital_id == hospital_id)
+    return q.limit(1).first() is not None
 
 
-def risk_distribution_counts(db: Session) -> dict:
+def risk_distribution_counts(db: Session, hospital_id: int | None = None) -> dict:
     """
     Three-tier distribution by probability for dashboard charts.
     Low < 0.33, Medium 0.33–0.67, High > 0.67.
@@ -115,11 +113,14 @@ def risk_distribution_counts(db: Session) -> dict:
         else_=0,
     )
 
-    row = db.query(
+    q = db.query(
         func.sum(low_expr).label("low"),
         func.sum(medium_expr).label("medium"),
         func.sum(high_expr).label("high"),
-    ).one()
+    )
+    if hospital_id is not None:
+        q = q.filter(PredictionLog.hospital_id == hospital_id)
+    row = q.one()
 
     return {
         RISK_TIER_LOW: int(row.low or 0),
@@ -128,13 +129,16 @@ def risk_distribution_counts(db: Session) -> dict:
     }
 
 
-def average_vitals(db: Session) -> dict:
-    row = db.query(
+def average_vitals(db: Session, hospital_id: int | None = None) -> dict:
+    q = db.query(
         func.avg(PredictionLog.ap_hi).label("ap_hi"),
         func.avg(PredictionLog.ap_lo).label("ap_lo"),
         func.avg(PredictionLog.cholesterol).label("cholesterol"),
         func.avg(PredictionLog.age).label("age"),
-    ).one()
+    )
+    if hospital_id is not None:
+        q = q.filter(PredictionLog.hospital_id == hospital_id)
+    row = q.one()
 
     return {
         "ap_hi": round(float(row.ap_hi or 0.0), 2),
@@ -144,21 +148,21 @@ def average_vitals(db: Session) -> dict:
     }
 
 
-def prediction_trends_by_day(db: Session, days: int = 30) -> list:
+def prediction_trends_by_day(db: Session, days: int = 30, hospital_id: int | None = None) -> list:
     cutoff = datetime.utcnow() - timedelta(days=days)
     day_bucket = func.date_trunc("day", PredictionLog.timestamp)
 
-    rows = (
+    q = (
         db.query(
             day_bucket.label("day"),
             func.count(PredictionLog.id).label("count"),
             func.avg(PredictionLog.risk_probability).label("avg_risk"),
         )
         .filter(PredictionLog.timestamp >= cutoff)
-        .group_by(day_bucket)
-        .order_by(day_bucket)
-        .all()
     )
+    if hospital_id is not None:
+        q = q.filter(PredictionLog.hospital_id == hospital_id)
+    rows = q.group_by(day_bucket).order_by(day_bucket).all()
 
     trends = []
     for row in rows:
@@ -179,10 +183,8 @@ def prediction_trends_by_day(db: Session, days: int = 30) -> list:
     return trends
 
 
-def fetch_recent_logs(db: Session, limit: int = 50) -> list:
-    return (
-        db.query(PredictionLog)
-        .order_by(desc(PredictionLog.timestamp))
-        .limit(limit)
-        .all()
-    )
+def fetch_recent_logs(db: Session, limit: int = 50, hospital_id: int | None = None) -> list:
+    q = db.query(PredictionLog).order_by(desc(PredictionLog.timestamp))
+    if hospital_id is not None:
+        q = q.filter(PredictionLog.hospital_id == hospital_id)
+    return q.limit(limit).all()

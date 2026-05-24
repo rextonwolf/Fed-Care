@@ -10,7 +10,7 @@ Heuristics used:
 Returns (score: float, label: str, notes: List[str])
 """
 from typing import Any, Dict, List, Tuple
-from backend.clinical_schema import API_CORE_FEATURES
+from clinical_schema import API_CORE_FEATURES
 
 
 def _base_from_probability(prediction: Dict[str, Any]) -> float:

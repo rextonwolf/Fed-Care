@@ -14,11 +14,11 @@ from sqlalchemy import func
 from sqlalchemy import case
 from sqlalchemy.orm import Session
 
-from backend.database.analytics_queries import DEFAULT_MODEL_VERSION
-from backend.database.analytics_queries import latest_model_version
-from backend.database.models import FederatedClient
-from backend.database.models import FederatedRound
-from backend.database.models import PredictionLog
+from database.analytics_queries import DEFAULT_MODEL_VERSION
+from database.analytics_queries import latest_model_version
+from database.models import FederatedClient
+from database.models import FederatedRound
+from database.models import PredictionLog
 
 
 # Default hospital FL cohort (matches enterprise monitor UI)

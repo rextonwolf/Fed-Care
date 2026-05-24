@@ -5,7 +5,7 @@ import numpy as np
 
 from collections import OrderedDict
 
-from backend.model import FTTransformer
+from model import FTTransformer
 
 
 # Create models directory

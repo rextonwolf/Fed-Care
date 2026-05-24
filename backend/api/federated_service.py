@@ -8,14 +8,14 @@ from fastapi import HTTPException
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from backend.database import federated_queries as fq
+from database import federated_queries as fq
 
-from backend.api.federated_schemas import AggregationMetrics
-from backend.api.federated_schemas import FederatedClientItem
-from backend.api.federated_schemas import FederatedClientsResponse
-from backend.api.federated_schemas import FederatedRoundItem
-from backend.api.federated_schemas import FederatedRoundsResponse
-from backend.api.federated_schemas import FederatedStatusResponse
+from api.federated_schemas import AggregationMetrics
+from api.federated_schemas import FederatedClientItem
+from api.federated_schemas import FederatedClientsResponse
+from api.federated_schemas import FederatedRoundItem
+from api.federated_schemas import FederatedRoundsResponse
+from api.federated_schemas import FederatedStatusResponse
 
 
 def _handle_db_error(exc: Exception) -> None:

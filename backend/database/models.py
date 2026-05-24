@@ -9,7 +9,7 @@ from sqlalchemy.orm import relationship
 
 from datetime import datetime
 
-from backend.database.database import Base
+from database.database import Base
 
 
 class Hospital(Base):

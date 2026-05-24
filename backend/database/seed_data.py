@@ -6,10 +6,10 @@ from typing import Any
 
 from sqlalchemy.orm import Session
 
-from backend.database.models import Hospital
-from backend.database.models import Patient
-from backend.database.models import PredictionLog
-from backend.database.models import User
+from database.models import Hospital
+from database.models import Patient
+from database.models import PredictionLog
+from database.models import User
 
 
 DEFAULT_HOSPITALS = [

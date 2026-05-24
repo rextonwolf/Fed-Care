@@ -10,10 +10,10 @@ from typing import Any, Dict, List
 import joblib
 import numpy as np
 
-from backend.clinical_schema import API_CORE_FEATURES
-from backend.clinical_schema import API_TO_GRAPH
-from backend.config import resolve_artifact_path
-from backend.config import settings
+from clinical_schema import API_CORE_FEATURES
+from clinical_schema import API_TO_GRAPH
+from config import resolve_artifact_path
+from config import settings
 
 LEGACY_FEATURES = list(API_CORE_FEATURES)
 

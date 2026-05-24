@@ -19,55 +19,55 @@ from fastapi import UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy.orm import Session
 
-from backend.api.analytics_schemas import PredictionAnalyticsResponse
-from backend.api.analytics_schemas import RecentActivityResponse
-from backend.api.analytics_schemas import SystemMetricsResponse
-from backend.api.analytics_service import get_prediction_analytics
-from backend.api.analytics_service import get_recent_activity
-from backend.api.analytics_service import get_system_metrics
-from backend.api.dataset_service import create_dataset_upload_record
-from backend.api.dataset_service import get_uploaded_datasets
-from backend.api.dataset_schemas import DatasetUploadResponse
-from backend.api.explainability_service import run_explainability
-from backend.api.fairness_schemas import FairnessMetricsResponse
-from backend.api.fairness_schemas import FairnessTrendsResponse
-from backend.api.fairness_service import get_fairness_metrics
-from backend.api.fairness_service import get_fairness_trends
-from backend.api.federated_schemas import FederatedClientsResponse
-from backend.api.federated_schemas import FederatedRoundsResponse
-from backend.api.federated_schemas import FederatedStatusResponse
-from backend.api.federated_service import get_federated_clients
-from backend.api.federated_service import get_federated_rounds
-from backend.api.federated_service import get_federated_status
-from backend.api.neuro_symbolic_service import validate_patient_prediction
-from backend.validation.uncertainty_engine import validate_prediction as validate_uncertainty
-from backend.api.patient_schemas import PatientCreate
-from backend.api.patient_schemas import PatientDetail
-from backend.api.patient_schemas import PatientHistoryResponse
-from backend.api.patient_schemas import PatientListResponse
-from backend.api.patient_schemas import PatientUpdate
-from backend.api.patient_lookup_service import search_patients as lookup_search_patients
-from backend.api.patient_schemas import PatientSearchResponse
-from backend.api.patient_service import create_patient_record
-from backend.api.patient_service import get_patient_detail
-from backend.api.patient_service import get_patient_history
-from backend.api.patient_service import list_patient_records
-from backend.api.patient_service import update_patient_record
-from backend.api.predictor import predict
-from backend.api.schemas import PatientData
-from backend.auth.auth_bearer import JWTBearer
-from backend.auth.auth_handler import create_access_token
-from backend.auth.users import users_db
-from backend.config import BACKEND_ROOT
-from backend.config import settings
-from backend.database import patient_crud as patient_db
-from backend.database.crud import create_prediction_log
-from backend.database.database import SessionLocal
-from backend.database.database import engine
-from backend.database.models import Base
-from backend.database.models import PredictionLog
-from backend.database.schema_compat import ensure_schema_compat
-from backend.database.seed_data import seed_reference_data
+from api.analytics_schemas import PredictionAnalyticsResponse
+from api.analytics_schemas import RecentActivityResponse
+from api.analytics_schemas import SystemMetricsResponse
+from api.analytics_service import get_prediction_analytics
+from api.analytics_service import get_recent_activity
+from api.analytics_service import get_system_metrics
+from api.dataset_service import create_dataset_upload_record
+from api.dataset_service import get_uploaded_datasets
+from api.dataset_schemas import DatasetUploadResponse
+from api.explainability_service import run_explainability
+from api.fairness_schemas import FairnessMetricsResponse
+from api.fairness_schemas import FairnessTrendsResponse
+from api.fairness_service import get_fairness_metrics
+from api.fairness_service import get_fairness_trends
+from api.federated_schemas import FederatedClientsResponse
+from api.federated_schemas import FederatedRoundsResponse
+from api.federated_schemas import FederatedStatusResponse
+from api.federated_service import get_federated_clients
+from api.federated_service import get_federated_rounds
+from api.federated_service import get_federated_status
+from api.neuro_symbolic_service import validate_patient_prediction
+from validation.uncertainty_engine import validate_prediction as validate_uncertainty
+from api.patient_schemas import PatientCreate
+from api.patient_schemas import PatientDetail
+from api.patient_schemas import PatientHistoryResponse
+from api.patient_schemas import PatientListResponse
+from api.patient_schemas import PatientUpdate
+from api.patient_lookup_service import search_patients as lookup_search_patients
+from api.patient_schemas import PatientSearchResponse
+from api.patient_service import create_patient_record
+from api.patient_service import get_patient_detail
+from api.patient_service import get_patient_history
+from api.patient_service import list_patient_records
+from api.patient_service import update_patient_record
+from api.predictor import predict
+from api.schemas import PatientData
+from auth.auth_bearer import JWTBearer
+from auth.auth_handler import create_access_token
+from auth.users import users_db
+from config import BACKEND_ROOT
+from config import settings
+from database import patient_crud as patient_db
+from database.crud import create_prediction_log
+from database.database import SessionLocal
+from database.database import engine
+from database.models import Base
+from database.models import PredictionLog
+from database.schema_compat import ensure_schema_compat
+from database.seed_data import seed_reference_data
 
 
 Base.metadata.create_all(bind=engine)
@@ -428,7 +428,7 @@ def login(username: str, password: str):
     # Include hospital_id from persistent DB user when available (keeps login contract)
     db = SessionLocal()
     try:
-        from backend.database.models import User as DBUser
+        from database.models import User as DBUser
 
         db_user = db.query(DBUser).filter(DBUser.username == username).first()
         if db_user and getattr(db_user, "hospital_id", None) is not None:

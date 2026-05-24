@@ -9,17 +9,17 @@ from fastapi import HTTPException
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from backend.database import fairness_queries as fq
+from database import fairness_queries as fq
 
-from backend.api.fairness_schemas import BiasDriftIndicator
-from backend.api.fairness_schemas import FairnessMetricsResponse
-from backend.api.fairness_schemas import FairnessTrendPoint
-from backend.api.fairness_schemas import FairnessTrendsResponse
-from backend.api.fairness_schemas import GenderDistributionItem
-from backend.api.fairness_schemas import ProtectedGroupStat
-from backend.api.fairness_schemas import RiskByGenderRow
-from backend.api.fairness_schemas import SubgroupPositiveRate
-from backend.api.fairness_schemas import SubgroupTrendPoint
+from api.fairness_schemas import BiasDriftIndicator
+from api.fairness_schemas import FairnessMetricsResponse
+from api.fairness_schemas import FairnessTrendPoint
+from api.fairness_schemas import FairnessTrendsResponse
+from api.fairness_schemas import GenderDistributionItem
+from api.fairness_schemas import ProtectedGroupStat
+from api.fairness_schemas import RiskByGenderRow
+from api.fairness_schemas import SubgroupPositiveRate
+from api.fairness_schemas import SubgroupTrendPoint
 
 
 def _handle_db_error(exc: Exception) -> None:

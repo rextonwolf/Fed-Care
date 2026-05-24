@@ -2,9 +2,9 @@ from typing import List
 
 from sqlalchemy.orm import Session
 
-from backend.api.dataset_schemas import DatasetUploadResponse
-from backend.database.dataset_crud import create_dataset_upload
-from backend.database.dataset_crud import list_dataset_uploads
+from api.dataset_schemas import DatasetUploadResponse
+from database.dataset_crud import create_dataset_upload
+from database.dataset_crud import list_dataset_uploads
 
 
 def get_uploaded_datasets(db: Session, current_user: dict | None = None) -> List[DatasetUploadResponse]:

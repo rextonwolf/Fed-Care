@@ -6,10 +6,10 @@ from fastapi import HTTPException
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
-from backend.api.patient_schemas import PatientSearchResponse
-from backend.api.patient_schemas import PatientSummary
-from backend.api.patient_service import _to_summary
-from backend.database import patient_crud as pc
+from api.patient_schemas import PatientSearchResponse
+from api.patient_schemas import PatientSummary
+from api.patient_service import _to_summary
+from database import patient_crud as pc
 
 
 def _handle_db_error(exc: Exception) -> None:

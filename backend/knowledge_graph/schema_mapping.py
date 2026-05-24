@@ -1,5 +1,5 @@
 """
-Unified clinical vocabulary — re-exported from backend.clinical_schema.
+Unified clinical vocabulary — re-exported from clinical_schema.
 """
 
 from clinical_schema import (  # noqa: F401

@@ -4,8 +4,8 @@ Explainability service layer — formats SHAP results for the REST API.
 
 from fastapi import HTTPException
 
-from backend.api.schemas import PatientData
-from backend.explainability.shap_explainer import explain_patient
+from api.schemas import PatientData
+from explainability.shap_explainer import explain_patient
 
 MODEL_META = {
     "name": "FTTransformer",

@@ -1,9 +1,9 @@
 from sqlalchemy.orm import Session
 
-from backend.config import settings
-from backend.database.models import Hospital
-from backend.database.models import Patient
-from backend.database.models import PredictionLog
+from config import settings
+from database.models import Hospital
+from database.models import Patient
+from database.models import PredictionLog
 
 
 def _default_hospital_id(db: Session) -> int | None:

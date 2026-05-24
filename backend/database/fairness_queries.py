@@ -14,8 +14,8 @@ from sqlalchemy import func
 from sqlalchemy import case
 from sqlalchemy.orm import Session
 
-from backend.database.analytics_queries import _high_risk_condition
-from backend.database.models import PredictionLog
+from database.analytics_queries import _high_risk_condition
+from database.models import PredictionLog
 
 
 # Cardiovascular cohort encoding: 1 = female, 2 = male (Kaggle cardio train)

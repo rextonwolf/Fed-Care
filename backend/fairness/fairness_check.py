@@ -7,7 +7,7 @@ from fairlearn.metrics import MetricFrame
 from fairlearn.metrics import selection_rate
 from sklearn.metrics import accuracy_score
 
-from backend.model import FTTransformer
+from model import FTTransformer
 
 
 # Device

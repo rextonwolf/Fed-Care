@@ -8,7 +8,7 @@ Performs:
 Returns a structured dict with boolean flag and list of human-readable issues.
 """
 from typing import Any, Dict, List
-from backend.clinical_schema import API_CORE_FEATURES, API_TO_GRAPH
+from clinical_schema import API_CORE_FEATURES, API_TO_GRAPH
 
 
 # Clinical plausibility bounds (inclusive).

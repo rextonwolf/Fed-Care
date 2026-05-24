@@ -14,8 +14,8 @@ from sklearn.metrics import (
 
 from torch.utils.data import DataLoader
 
-from backend.cardio_dataset import CardioDataset
-from backend.model import FTTransformer
+from cardio_dataset import CardioDataset
+from model import FTTransformer
 
 
 # Device

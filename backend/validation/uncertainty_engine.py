@@ -8,8 +8,8 @@ This module orchestrates the other validators in the same package.
 """
 from typing import Any, Dict
 
-from backend.validation import anomaly_detector
-from backend.validation import confidence_scoring
+from validation import anomaly_detector
+from validation import confidence_scoring
 
 
 def validate_prediction(payload: Dict[str, Any], prediction: Dict[str, Any]) -> Dict[str, Any]:

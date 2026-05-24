@@ -13,17 +13,17 @@ import pandas as pd
 import shap
 import torch
 
-from backend.api.feature_registry import build_feature_matrix
-from backend.api.feature_registry import get_feature_names
-from backend.api.feature_registry import get_scaler
-from backend.api.feature_registry import input_dimension
-from backend.api.feature_registry import patient_to_feature_dict
-from backend.api.predictor import DEVICE
-from backend.api.predictor import INPUT_DIM
-from backend.config import BACKEND_ROOT
-from backend.config import resolve_artifact_path
-from backend.config import settings
-from backend.model import FTTransformer
+from api.feature_registry import build_feature_matrix
+from api.feature_registry import get_feature_names
+from api.feature_registry import get_scaler
+from api.feature_registry import input_dimension
+from api.feature_registry import patient_to_feature_dict
+from api.predictor import DEVICE
+from api.predictor import INPUT_DIM
+from config import BACKEND_ROOT
+from config import resolve_artifact_path
+from config import settings
+from model import FTTransformer
 
 FEATURE_NAMES = get_feature_names()
 
@@ -126,7 +126,7 @@ def _format_shap_output(shap_values: np.ndarray) -> dict:
 
 
 def explain_patient(patient) -> dict:
-    from backend.api.predictor import predict
+    from api.predictor import predict
 
     prediction = predict(patient)
     scaled = build_feature_matrix(patient)

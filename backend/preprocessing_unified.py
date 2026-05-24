@@ -21,8 +21,8 @@ from joblib import dump
 from sklearn.model_selection import train_test_split
 from sklearn.preprocessing import LabelEncoder, StandardScaler
 
-from backend.clinical_schema import TARGET_COLUMN, UNIFIED_MODEL_FEATURES
-from backend.data.mimic_etl import build_mimic_cohort
+from clinical_schema import TARGET_COLUMN, UNIFIED_MODEL_FEATURES
+from data.mimic_etl import build_mimic_cohort
 
 BACKEND_ROOT = Path(__file__).resolve().parent
 PROJECT_ROOT = BACKEND_ROOT.parent

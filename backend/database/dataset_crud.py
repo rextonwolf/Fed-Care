@@ -2,7 +2,7 @@ from typing import List
 
 from sqlalchemy.orm import Session
 
-from backend.database.models import DatasetUpload
+from database.models import DatasetUpload
 
 
 def create_dataset_upload(

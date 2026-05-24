@@ -1,11 +1,11 @@
 import torch
 
-from backend.api.feature_registry import build_feature_matrix
-from backend.api.feature_registry import get_feature_names
-from backend.api.feature_registry import input_dimension
-from backend.config import resolve_artifact_path
-from backend.config import settings
-from backend.model import FTTransformer
+from api.feature_registry import build_feature_matrix
+from api.feature_registry import get_feature_names
+from api.feature_registry import input_dimension
+from config import resolve_artifact_path
+from config import settings
+from model import FTTransformer
 
 DEVICE = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 

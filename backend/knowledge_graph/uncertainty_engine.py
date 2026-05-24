@@ -16,7 +16,7 @@ import numpy as np
 
 from .config import PRIMARY_NEURAL_DISEASE
 from .config import PREDICTOR_FEATURES
-from backend.clinical_schema import API_TO_GRAPH
+from clinical_schema import API_TO_GRAPH
 from .graph_builder import MedicalKnowledgeGraph
 
 

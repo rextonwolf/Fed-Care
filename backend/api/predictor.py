@@ -13,10 +13,10 @@ MODEL_PATH = resolve_artifact_path(settings.model_path)
 INPUT_DIM = input_dimension()
 
 model = FTTransformer(input_dim=INPUT_DIM)
-model.load_state_dict(torch.load(MODEL_PATH, map_location=DEVICE))
+#model.load_state_dict(torch.load(MODEL_PATH, map_location=DEVICE))
 model = model.to(DEVICE)
 model.eval()
-
+print("Using untrained fallback model for deployment")
 
 def predict(data):
     scaled = build_feature_matrix(data)
